@@ -1,4 +1,4 @@
-# Verifiering av Ordverk 0.2
+# Verifiering av Ordverk 0.3
 
 Verifierat den 20 september 2026. Första releasen är 0.2.
 
@@ -49,10 +49,9 @@ mellan `.aff` och `.dic` och verifierar att föregående par fortfarande använd
 ## Paketering och CI
 
 GitHub Actions har separata jobb för Linux/GTK, Gitleaks, Debian och Fedora.
-Utvecklingsversionens aktuella resultat finns i [CI-historiken](https://github.com/yeager/ordverk/actions/workflows/ci.yml).
-[CI-körningen 35496578125](https://github.com/yeager/ordverk/actions/runs/35496578125)
-verifierade samtliga fyra jobb. Releasekontrollen kräver också en grön körning
-för den slutliga release-revisionen.
+Aktuella resultat finns i [CI-historiken](https://github.com/yeager/ordverk/actions/workflows/ci.yml).
+Releasekontrollen kräver en grön körning för den slutliga release-revisionen.
+Releasens `release-manifest.json` anger revision, CI-körning och byggresultat.
 
 Debian-bygget använder debhelper, pybuild och dh-python, kontrolleras med
 Lintian och installeras med apt. Fedora använder pyproject-rpm-macros,

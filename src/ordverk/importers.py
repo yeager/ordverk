@@ -10,6 +10,7 @@ import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from . import __version__
 from .catalog import Catalog, EXTENSIONS
 
 MAX_FILE_BYTES = 32 * 1024 * 1024
@@ -47,7 +48,7 @@ class SafeRedirect(urllib.request.HTTPRedirectHandler):
 
 def download(url, *, limit=MAX_FILE_BYTES, cancel=None):
     validate_url(url)
-    request = urllib.request.Request(url, headers={"User-Agent": "Ordverk/0.2", "Accept": "*/*"})
+    request = urllib.request.Request(url, headers={"User-Agent": f"Ordverk/{__version__}", "Accept": "*/*"})
     try:
         with urllib.request.build_opener(SafeRedirect()).open(request, timeout=25) as response:
             parts, size = [], 0

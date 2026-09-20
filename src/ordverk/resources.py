@@ -16,6 +16,7 @@ from pathlib import Path
 
 import polib
 
+from . import __version__
 from .catalog import XML_LANG, atomic_write, digest, localname, parse_xml, text_content
 from .importers import check_cancel, download
 from .settings import data_dir
@@ -221,7 +222,7 @@ class ResourceStore:
                 progress(f"Söker uppdateringar: {repo}", index, len(components))
                 branch = "master" if repo == "aspell-sv" else "main"
                 url = f"https://api.github.com/repos/yeager/{repo}/git/trees/{branch}?recursive=1"
-                headers = {"User-Agent": "Ordverk/0.2", "Accept": "application/vnd.github+json"}
+                headers = {"User-Agent": f"Ordverk/{__version__}", "Accept": "application/vnd.github+json"}
                 old = self.versions.get(repo, {})
                 if old.get("etag"):
                     headers["If-None-Match"] = old["etag"]

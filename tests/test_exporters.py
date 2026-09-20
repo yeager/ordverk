@@ -3,6 +3,7 @@ import threading
 
 import pytest
 
+from ordverk import __version__
 from ordverk.catalog import Catalog
 from ordverk.diffs import parse_diff, patch_text
 from ordverk.exporters import FORMATS, prepare, write_exports
@@ -41,7 +42,7 @@ def test_original_export_preserves_bytes_and_unsaved_edits(filename):
     catalog = Catalog(filename, SOURCES[filename])
     result = prepare(catalog)
     if filename.endswith(".po"):
-        assert Catalog(result.name, result.data).po.metadata["X-Generator"] == "Ordverk 0.2"
+        assert Catalog(result.name, result.data).po.metadata["X-Generator"] == f"Ordverk {__version__}"
         assert catalog.raw == SOURCES[filename] and not catalog.dirty
     else:
         assert result.data == SOURCES[filename]

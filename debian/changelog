@@ -1,3 +1,11 @@
+ordverk (0.3-1) unstable; urgency=medium
+
+  * Add translation providers, context, exports and PO/POT maintenance.
+  * Improve Swedish localization, unsaved-change protection and large catalogs.
+  * Require gettext for POT merging and PO consistency checks.
+
+ -- Daniel Nylander <daniel@danielnylander.se>  Sun, 20 Sep 2026 11:10:00 +0200
+
 ordverk (0.2-1) unstable; urgency=medium
 
   * Initial release.

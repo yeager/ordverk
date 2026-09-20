@@ -5,6 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from ordverk import __version__
 from ordverk.ai_context import catalog_context
 from ordverk.ai_providers import PROVIDERS, is_configured
 from ordverk.catalog import Catalog, Unit
@@ -64,7 +65,7 @@ def test_provider_protocol_context_and_authentication(service, provider):
     assert result.translation == 'Spara' and unit.targets == ['']
     path, headers, payload = service['requests'][0]
     headers = {k.lower(): v for k, v in headers.items()}
-    assert headers['user-agent'] == 'Ordverk/0.2'
+    assert headers['user-agent'] == f'Ordverk/{__version__}'
     if provider.protocol == 'anthropic':
         assert path == '/messages'
         assert headers['x-api-key'] == 'test-provider-token'

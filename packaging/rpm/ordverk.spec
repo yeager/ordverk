@@ -1,5 +1,5 @@
 Name:           ordverk
-Version:        0.2
+Version:        0.3
 Release:        1%{?dist}
 Summary:        Swedish translation workbench for Linux
 License:        GPL-3.0-or-later
@@ -55,5 +55,9 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/io.github.yeager.Ordv
 %{_mandir}/man1/ordverk.1*
 
 %changelog
+* Sun Sep 20 2026 Daniel Nylander <daniel@danielnylander.se> - 0.3-1
+- Add translation providers, context, exports and PO/POT maintenance.
+- Improve Swedish localization, unsaved-change protection and large catalogs.
+
 * Sun Sep 20 2026 Daniel Nylander <daniel@danielnylander.se> - 0.2-1
 - Initial release.

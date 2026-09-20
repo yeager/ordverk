@@ -14,7 +14,15 @@
   <url type="bugtracker">https://github.com/yeager/ordverk/issues</url>
   <developer id="io.github.yeager"><name>Daniel Nylander</name></developer>
   <content_rating type="oars-1.1"/>
-  <releases><release version="0.2" date="2026-09-20"/></releases>
+  <releases>
+    <release version="0.3" date="2026-09-20">
+      <description>
+        <p>AI-förval och översättningskontext, uppdatering från POT-filer, redigering av PO-huvud och export till alla format.</p>
+        <p>Svenska standarddialoger, strängnummer, fler urval och varning för osparade ändringar. Konsistenskontroll vid sparning och export.</p>
+      </description>
+    </release>
+    <release version="0.2" date="2026-09-20"/>
+  </releases>
   <provides><binary>ordverk</binary></provides>
   <requires><display_length compare="ge">1200</display_length></requires>
   <supports><control>pointing</control><control>keyboard</control></supports>

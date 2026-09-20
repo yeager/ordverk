@@ -66,7 +66,7 @@ jobs:
       - name: Bygg källpaket och DEB-paket
         run: |
           python3 scripts/native_sources.py /tmp/native
-          for source in /tmp/native/l10n-lint-* /tmp/native/svlang-* /tmp/native/ordverk-0.2; do
+          for source in /tmp/native/l10n-lint-* /tmp/native/svlang-* /tmp/native/ordverk-*; do
             if [ -d "$source" ]; then (cd "$source" && dpkg-buildpackage -us -uc); fi
           done
           mkdir -p artifacts/deb
@@ -95,7 +95,7 @@ jobs:
         run: |
           python3 scripts/native_sources.py /tmp/native
           mkdir -p /tmp/rpmbuild/SOURCES /tmp/rpmbuild/SPECS
-          cp /tmp/native/l10n-lint-*.tar.gz /tmp/native/svlang-*.tar.gz /tmp/native/ordverk-0.2.tar.gz /tmp/rpmbuild/SOURCES/
+          cp /tmp/native/l10n-lint-*.tar.gz /tmp/native/svlang-*.tar.gz /tmp/native/ordverk-*.tar.gz /tmp/rpmbuild/SOURCES/
           cp /tmp/native/*.spec packaging/rpm/ordverk.spec /tmp/rpmbuild/SPECS/
           for spec in /tmp/rpmbuild/SPECS/*.spec; do
             rpmbuild --define '_topdir /tmp/rpmbuild' -ba "$spec"

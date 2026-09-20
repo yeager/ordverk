@@ -2,6 +2,7 @@ import threading
 
 import pytest
 
+from ordverk import __version__
 from ordverk.catalog import Catalog
 from ordverk.consistency import parse_checked, verify_written
 from ordverk.exporters import prepare, write_exports
@@ -66,7 +67,7 @@ def test_pot_merge_preserves_translations_updates_date_and_defers_writing(tmp_pa
     assert changed.references == "new.c:23"
     assert catalog.po.metadata["POT-Creation-Date"] == "2026-09-20 12:00+0000"
     assert catalog.po.metadata["Last-Translator"] == "Daniel Nylander <daniel@example.org>"
-    assert catalog.po.metadata["X-Generator"] == "Ordverk 0.2"
+    assert catalog.po.metadata["X-Generator"] == f"Ordverk {__version__}"
     assert any(entry.obsolete and entry.msgid == "Completely obsolete action" for entry in catalog.po)
     catalog.save()
     assert not catalog.dirty and catalog.import_raw == PO

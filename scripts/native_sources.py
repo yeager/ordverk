@@ -9,9 +9,11 @@ import shutil
 import subprocess
 import sys
 import tarfile
+import tomllib
 import urllib.request
 
 ROOT = Path(__file__).resolve().parents[1]
+VERSION = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]["version"]
 LIBRARIES = {
     "l10n-lint": ("1.21.4", "27ee6ae7860514ddbaaaa08d3cb06c8ead28f69f", "29000e6426d8d72af520586b94ca710e2197ad45579484e132afbe9b68186180", "GPL-3.0-or-later", "l10n_lint l10n_lint_gtk l10n_project print_helper", "l10n-lint l10n-lint-gtk"),
     "svlang": ("0.2.2", "5c54d9ec29a3e8dd0158ed6d33498830f823617f", "df560284453b337ef2ccdb823039bf3afd71042b9808d325a1603fbb04dd56e2", "MIT", "svlang", "svlang"),
@@ -163,11 +165,12 @@ def main():
         write(destination / f"python-{name}.spec", rpm_spec(name, version, license_name, modules, commands, revision))
         records.append({"name": name, "version": version, "revision": revision, "sha256": sha, "url": url})
     subprocess.run([sys.executable, "-m", "build", "--sdist", "--outdir", str(destination), str(ROOT)], check=True)
-    with tarfile.open(destination / "ordverk-0.2.tar.gz") as archive:
+    source_name = f"ordverk-{VERSION}"
+    with tarfile.open(destination / f"{source_name}.tar.gz") as archive:
         archive.extractall(destination, filter="data")
-    with tarfile.open(destination / "ordverk_0.2.orig.tar.gz", "w:gz") as archive:
-        archive.add(destination / "ordverk-0.2", arcname="ordverk-0.2",
-                    filter=lambda entry: None if entry.name == "ordverk-0.2/debian" or entry.name.startswith("ordverk-0.2/debian/") else entry)
+    with tarfile.open(destination / f"ordverk_{VERSION}.orig.tar.gz", "w:gz") as archive:
+        archive.add(destination / source_name, arcname=source_name,
+                    filter=lambda entry: None if entry.name == f"{source_name}/debian" or entry.name.startswith(f"{source_name}/debian/") else entry)
     write(destination / "sources.json", json.dumps(records, indent=2) + "\n")
 
 

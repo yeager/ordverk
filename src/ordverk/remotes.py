@@ -11,6 +11,7 @@ import urllib.request
 import uuid
 from dataclasses import asdict, dataclass, field
 
+from . import __version__
 from .catalog import Catalog, atomic_write, digest
 from .importers import MAX_FILE_BYTES, check_cancel, download, validate_url
 from .settings import data_dir
@@ -114,7 +115,7 @@ class Client:
     def request(self, method, path, *, payload=None, data=None, content_type=None, headers=None, raw=False):
         check_cancel(self.cancel)
         url = self.profile.base_url.rstrip("/") + "/" + path.lstrip("/")
-        outgoing = {"User-Agent": "Ordverk/0.2", "Accept": "application/json"}
+        outgoing = {"User-Agent": f"Ordverk/{__version__}", "Accept": "application/json"}
         if self.token:
             outgoing["Authorization"] = ("Token " if self.profile.provider == "weblate" else "Bearer ") + self.token
         if payload is not None:

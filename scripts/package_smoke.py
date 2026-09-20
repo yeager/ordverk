@@ -15,7 +15,7 @@ with tempfile.TemporaryDirectory() as cache:
     from gi.repository import Adw, GLib, Gtk
     import ordverk
     assert not str(Path(ordverk.__file__).resolve()).startswith(str(Path.cwd() / "src"))
-    assert __version__ == "0.2"
+    assert __version__ == "0.3"
     app = Application()
     app.register(None)
     window = Window(app, settings=Settings(auto_update_resources=False), startup=False)
@@ -39,4 +39,4 @@ with tempfile.TemporaryDirectory() as cache:
     about.close()
     window.shutdown()
     app.quit()
-    print("Installerad Ordverk 0.2: GTK-fönster, programikon och svenska standardtexter fungerar.")
+    print(f"Installerad Ordverk {__version__}: GTK-fönster, programikon och svenska standardtexter fungerar.")
