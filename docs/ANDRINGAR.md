@@ -1,5 +1,13 @@
 # Ändringslogg
 
+## Kommande
+
+- Importstatistik i en popup som uppdateras med bakgrundsgranskningens resultat.
+- Strängfilter för stavfel, skiftläge och andra kvalitetsanmärkningar, även som
+  urval för föröversättning. Rättade strängar lämnar respektive felurval.
+- Skiftlägeskontroll i båda riktningarna med stöd för inledande inlinekoder,
+  taggar och platshållare. Fil- och strängdiagnostik hålls isär.
+
 ## 0.3 — 20 september 2026
 
 - AI-förval för OpenAI, Anthropic, X/Grok och DeepL samt fortsatt stöd för valfri

@@ -34,6 +34,7 @@ class Settings:
     aspell_directory: str = ""
     use_hunspell: bool = True
     use_aspell: bool = True
+    auto_review_imports: bool = True
     auto_update_resources: bool = True
     show_import_guide: bool = True
     import_purpose: str = "translate"

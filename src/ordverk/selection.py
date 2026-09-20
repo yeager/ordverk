@@ -13,10 +13,23 @@ FILTERS = (
     ("new", "Nya strängar sedan import"),
     ("plural", "Strängar med flera former"),
     ("marked", "Markerade strängar"),
+    ("quality-issues", "Strängar med kvalitetsanmärkningar"),
+    ("quality-errors", "Strängar med fel"),
+    ("quality-warnings", "Strängar med varningar"),
+    ("quality-spelling", "Strängar med stavfel"),
+    ("quality-case", "Strängar med fel skiftläge"),
+    ("quality-placeholders", "Strängar med fel i platshållare"),
+    ("quality-markup", "Strängar med fel i taggar eller inlinekoder"),
+    ("quality-punctuation", "Strängar med avvikande skiljetecken"),
+    ("quality-whitespace", "Strängar med blankstegs- eller radbrytningsfel"),
+    ("quality-numbers", "Strängar med avvikande tal eller datum"),
+    ("quality-terminology", "Strängar med terminologianmärkningar"),
 )
 
 
-def matches(unit, kind, *, marked=False):
+def matches(unit, kind, *, marked=False, quality_groups=()):
+    if kind.startswith("quality-"):
+        return kind.removeprefix("quality-") in quality_groups
     if kind == "all":
         return True
     if kind == "untranslated":

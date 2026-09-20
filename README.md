@@ -66,6 +66,32 @@ minnesträffar kräver bedömning. Förslag med kvalitetsfel tillämpas inte. Al
 tillämpade förslag markeras för granskning; originalfiler skrivs först vid **Spara**.
 Standardgränsen är 100 strängar per körning och kan ändras i avancerade inställningar.
 
+## Importstatistik och kvalitetsfilter
+
+Efter import öppnas en **Importstatistik**-popup med antal filer, strängar, ord,
+översatta/granskade strängar och återstående arbete. Vid mappimport samlas alla
+filer i en popup. En automatisk kvalitetsgranskning uppdaterar popupen med
+stavfel, fel skiftläge, platshållare, taggar, skiljetecken, blanksteg, tal och
+terminologianmärkningar. Pågående, avbruten och ofullständig granskning visas
+uttryckligen. Efter sju sekunder visas förlopp och möjlighet att avbryta.
+
+Menyn **Strängar** har motsvarande filter samt samlade urval för fel, varningar
+eller alla kvalitetsanmärkningar. Urvalen kan också användas vid föröversättning.
+De bygger på hittills kontrollerade strängar och uppdateras efter rättningar.
+Varje sträng räknas en gång per kategori, även om båda stavningsmotorerna eller
+flera pluralformer ger samma typ av anmärkning. Filövergripande anmärkningar
+visas separat i popupen och i rapporten från **Granska fil**.
+
+Skiftläge jämförs i båda riktningarna mellan källtextens och översättningens
+första synliga bokstav; inledande taggar och platshållare hoppas över. Detta är
+ett granskningsråd, eftersom språkens regler och sammanhang kan motivera en
+skillnad. JSON utan kopplad källtext jämförs inte med nyckelns skiftläge.
+
+Automatisk filgranskning är aktiverad som standard och kan stängas av under
+**Inställningar → Enkelt → Granska filer efter import**. Popupen visas även då;
+**Granska fil** fyller i kvalitetsresultaten manuellt. Statistik kan alltid
+öppnas igen med **Statistik**.
+
 ## Föröversättning och diff
 
 **Föröversätt** låter dig välja hela filen, aktuell sträng, visade strängar eller

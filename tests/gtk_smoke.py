@@ -306,6 +306,55 @@ busy.close_dialog.response("cancel")
 pump_until(lambda: not busy.busy)
 busy.on_close()
 assert busy.closed
+# Import popup stays live; quality filters use exact keys and discard old results.
+from ordverk.quality import Issue
+quality_window = Window(app, settings=settings, startup=False)
+quality_window.present()
+quality_catalog = Catalog("quality.json", '[{"source":"Save %s","target":"nogrann"},{"source":"open","target":"Öppna"},{"source":"Close","target":"Stäng"}]'.encode())
+quality_window.quality.spelling = lambda text, variant: ([Issue("warning", engine, "spelling", "Kontrollera stavningen: nogrann", variant) for engine in ("Hunspell", "Aspell")] if "nogrann" in text else [])
+original_review = quality_window.quality.catalog
+review_gate = threading.Event()
+def delayed_review(*args, **kwargs):
+    assert review_gate.wait(12)
+    return original_review(*args, **kwargs)
+quality_window.quality.catalog = delayed_review
+second_quality_catalog = Catalog("another.json", b'[ {"source":"Save","target":""} ]')
+quality_window.finish_import(ImportResult(catalogs=[quality_catalog, second_quality_catalog]))
+assert quality_window.quality_running is quality_catalog
+popup = next(w for w in Gtk.Window.get_toplevels() if w.get_title() == "Importstatistik" and w.get_transient_for() is quality_window)
+assert len(quality_window.statistics_views) == 1
+assert any("2 filer · 4 strängar" in text for text in widget_labels(popup))
+assert any("Kvalitetsgranskning pågår" in text for text in widget_labels(popup))
+quality_window.quality_meter.started -= 8
+quality_window.tick_progress()
+assert quality_window.quality_bar.get_visible()
+assert "Avbryt kvalitetsgranskning" in widget_labels(popup)
+review_gate.set()
+pump_until(lambda: quality_window.quality_running is None)
+assert any("3 kvalitetskontrollerade" in text and "1 med stavfel" in text and "2 med fel skiftläge" in text for text in widget_labels(popup))
+quality_window.filter.set_selected(next(i for i, (key, _) in enumerate(FILTERS) if key == "quality-case"))
+assert [row.number for row in quality_window.unit_store] == [1, 2]
+quality_scope = PretranslateDialog(quality_window)
+quality_scope.scope.set_selected(next(i for i, (key, _) in enumerate(quality_scope.scopes) if key == "quality-case"))
+assert len(quality_scope.selected_keys()) == 2
+quality_scope.close()
+quality_window.set_target("Spara %s")
+pump_until(lambda: quality_window.quality_index(quality_catalog).known(quality_catalog.units[0]))
+assert [row.number for row in quality_window.unit_store] == [2]
+assert any("0 med stavfel" in text and "1 med fel skiftläge" in text for text in widget_labels(popup))
+popup.close()
+assert not quality_window.statistics_views
+# Cancelling leaves an explicit incomplete result in the popup.
+def cancelled_review(*args, **kwargs):
+    assert kwargs["cancel"].wait(12)
+    return original_review(*args, **kwargs)
+quality_window.quality.catalog = cancelled_review
+cancel_catalog = Catalog("cancelled.json", b'[{"source":"Open","target":""}]')
+quality_window.finish_import(ImportResult(catalogs=[cancel_catalog]))
+quality_window.cancel_quality()
+pump_until(lambda: quality_window.quality_running is None)
+assert "avbröts" in quality_window.quality_index(cancel_catalog).state
+quality_window.shutdown()
 assert not errors, errors
 sys.excepthook = previous_hook
 app.quit()

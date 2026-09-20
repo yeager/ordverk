@@ -39,6 +39,7 @@ class Preferences(Adw.PreferencesWindow):
         group = Adw.PreferencesGroup(title="Arbetssätt", description="Svenska är målspråk. Du kan alltid redigera varje sträng.")
         simple.add(group)
         self.guide = switch(group, "Visa importguiden", "Fråga hur importerade filer ska behandlas.", self.settings.show_import_guide)
+        self.review_imports = switch(group, "Granska filer efter import", "Räkna stavfel och kvalitetsanmärkningar i bakgrunden.", self.settings.auto_review_imports)
         self.updates = switch(group, "Uppdatera språkresurser automatiskt", "Kontrollera vid varje start. Cachade data fungerar utan nät.", self.settings.auto_update_resources)
         self.project = entry(group, "Projektets sammanhang", self.settings.project_context)
         self.domain = entry(group, "Domän / ekosystem", self.settings.domain)
@@ -147,6 +148,7 @@ class Preferences(Adw.PreferencesWindow):
         settings.translator_email = self.translator_email.get_text().strip()
         settings.update_po_header = self.update_po_header.get_active()
         settings.show_import_guide = self.guide.get_active()
+        settings.auto_review_imports = self.review_imports.get_active()
         settings.auto_update_resources = self.updates.get_active()
         settings.project_context = self.project.get_text()
         settings.domain = self.domain.get_text()
@@ -302,12 +304,13 @@ class PretranslateDialog(Adw.PreferencesWindow):
             return self.marked
         if scope == "visible":
             return self.visible
-        return {(id(self.catalog), unit.key) for unit in self.catalog.units if matches(unit, scope)}
+        return {(id(self.catalog), unit.key) for unit in self.catalog.units if matches(unit, scope, quality_groups=self.parent.quality_groups(self.catalog, unit))}
 
     def update_scope_count(self):
         selected = self.selected_keys()
         count = len(self.catalog.units) if selected is None else len(selected)
-        self.scope_count.set_subtitle(f"{count} av {len(self.catalog.units)} strängar. Alla former ingår.")
+        self.scope_count.set_subtitle(f"{count} av {len(self.catalog.units)} strängar. Alla former ingår." +
+                                      (" Kvalitetsurval omfattar hittills kontrollerade strängar." if self.scopes[self.scope.get_selected()][0].startswith("quality-") else ""))
 
     def start(self):
         selected = self.selected_keys()

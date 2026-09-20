@@ -1,10 +1,10 @@
-# Verifiering av Ordverk 0.3
+# Verifiering av Ordverks arbetsversion
 
 Verifierat den 20 september 2026. Första releasen är 0.2.
 
 ## Programmet
 
-- 181 automatiserade tester täcker PO/TS/XLIFF/JSON, XML-koder, pluralformer,
+- 205 automatiserade tester täcker PO/TS/XLIFF/JSON, XML-koder, pluralformer,
   säkra sparningar, externa ändringar, import, diff, granskningsstatus,
   föröversättning, API-kontrakt, resurser, statistik och förloppsmätare.
 - GTK-testet öppnar riktiga fönster under Xvfb och provar import, redigering,
@@ -36,6 +36,12 @@ Verifierat den 20 september 2026. Första releasen är 0.2.
   i PO, TS, XLIFF 1.2 och XLIFF 2. Ingen dataförlust eller ohanterat programfel
   observerades. Köhantering för minnessökningar och förloppsuppdateringar samt
   förberedelse av avbrutna och begränsade batchjobb förbättrades efter mätning.
+
+Kvalitetsfiltren provas i alla fem formatvarianter, med likadana källtexter i
+olika kontexter, pluralformer, dubbla stavningsmotorer och ändringar under
+pågående granskning. GTK-testet kontrollerar importpopupen, samlad statistik
+för flera filer, förlopp efter sju sekunder, avbrytning, föröversättningsurval
+och att rättade strängar försvinner ur felurvalet och popupens felräkning.
 
 ## Språkresurser
 

@@ -1,6 +1,7 @@
 """Diagnostics reuse l10n-lint and svlang; spelling engines remain independent advice."""
 from __future__ import annotations
 
+import html
 import re
 import shutil
 import subprocess
@@ -17,6 +18,12 @@ from .importers import check_cancel
 
 def spelling_text(target):
     return re.sub(r"⟦/?\d+⟧|<[^>]+>|https?://\S+|\{[^{}]*\}|%\([^)]+\)[a-z]|%\d*\$?[a-zA-Z\d]+", " ", target)
+
+
+def initial_case(text):
+    clean = html.unescape(spelling_text(text))
+    letter = next((c for c in clean if c.lower() != c.upper()), None)
+    return None if letter is None else letter.isupper() or letter.istitle()
 
 
 @dataclass(frozen=True)
@@ -52,6 +59,8 @@ class Quality:
         disabled = {"fuzzy", "source-equals-translation"} if unit.source_is_key else {"fuzzy"}
         result = L10nLinter({"language": "sv"}, disabled_rules=disabled).lint_file("sv.po", str(po))
         for issue in result.issues if lint else []:
+            if issue.rule == "inconsistent-capitalization":
+                continue
             issues.append(Issue(issue.severity.value, "l10n-lint", issue.rule, diagnostic(issue), variant))
         if unit.codecs and target:
             from lxml import etree as ET
@@ -61,6 +70,12 @@ class Quality:
                 issues.append(Issue("error", "Ordverk", "inline-codes", str(exc), variant))
         if not target:
             return issues
+        if not unit.source_is_key:
+            source_case, target_case = initial_case(source), initial_case(target)
+            if source_case is not None and target_case is not None and source_case != target_case:
+                expected = "stor" if source_case else "liten"
+                issues.append(Issue("warning", "Ordverk", "inconsistent-capitalization",
+                                    f"Källtexten börjar med {expected} bokstav. Översättningen börjar med annat skiftläge.", variant))
         clean = spelling_text(target)
         for issue in SkrivreglerChecker().check(clean):
             issues.append(Issue("warning", "svlang", issue.rule, f"{issue.word} → {issue.suggestion}", variant))
@@ -124,8 +139,9 @@ class Quality:
             text = data.decode("utf-8-sig")
         filename = catalog.name if catalog.ext != ".pot" else "sv.po"
         result = L10nLinter({"language": "sv"}).lint_file(filename, text)
-        issues = [Issue(i.severity.value, "l10n-lint", i.rule,
-                      f"Rad {i.line}: {diagnostic(i)}" + (f" · {i.context}" if i.context else "")) for i in result.issues]
+        file_issues = [(i.rule, diagnostic(i), Issue(i.severity.value, "l10n-lint", i.rule,
+                      f"Rad {i.line}: {diagnostic(i)}" + (f" · {i.context}" if i.context else ""))) for i in result.issues]
+        issues, local_diagnostics = [], set()
         variants = [(u, v) for u in catalog.units for v in range(len(u.targets))]
         unavailable = set()
         # Load both dictionaries once per batch, while keeping diagnostics tied to a string.
@@ -137,7 +153,8 @@ class Quality:
             for offset, ((unit, variant), clean) in enumerate(zip(batch, texts)):
                 check_cancel(cancel)
                 progress(f"Granskar {catalog.name}: {start + offset + 1}/{len(variants)}", start + offset, len(variants))
-                local = self.check(unit, variant, spell=False, lint=False)
+                local = self.check(unit, variant, spell=False)
+                local_diagnostics.update((i.rule, i.message) for i in local if i.tool == "l10n-lint")
                 for issue in spelling:
                     if issue.rule == "spelling":
                         word = issue.message.removeprefix("Kontrollera stavningen: ")
@@ -148,5 +165,9 @@ class Quality:
                         unavailable.add((issue.tool, issue.rule))
                 issues.extend(replace(i, variant=variant, key=unit.key,
                                       message=f"{unit.source_for(variant)[:80]} · {unit.variants[variant]}: {i.message}") for i in local)
+        # Per-string diagnostics carry exact keys even for duplicate texts and JSON.
+        # Keep additional file-level rules (e.g. plural headers) in the report.
+        issues.extend(issue for rule, message, issue in file_issues
+                      if rule != "inconsistent-capitalization" and (rule, message) not in local_diagnostics)
         progress(f"Granskning klar: {catalog.name}", len(variants), len(variants))
         return issues

@@ -20,6 +20,7 @@ from .dialogs import ImportGuide, Preferences, PretranslateDialog
 from .importers import import_sources
 from .llm import Translator
 from .quality import Quality
+from .quality_index import ReviewIndex, signature
 from .progress import LatestProgress, ProgressState
 from .resources import ResourceStore
 from .remote_dialogs import Connections, MailDialog
@@ -84,6 +85,14 @@ class Window(Adw.ApplicationWindow):
         self.variant, self.loading, self.closed = 0, False, False
         self.executor = ThreadPoolExecutor(max_workers=3, thread_name_prefix="ordverk")
         self.check_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="ordverk-check")
+        self.review_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="ordverk-review")
+        self.quality_indexes = {}
+        self.statistics_views = []
+        self.quality_queue = []
+        self.quality_running = None
+        self.quality_cancel = threading.Event()
+        self.quality_meter = None
+        self.quality_progress = LatestProgress()
         self.check_future = None
         self.check_generation = 0
         self.job_cancel, self.resource_cancel = threading.Event(), threading.Event()
@@ -115,6 +124,12 @@ class Window(Adw.ApplicationWindow):
     def refresh_services(self):
         self.quality = Quality(self.settings, self.store)
         self.translator = Translator(self.settings, self.store, self.quality, self.session_key)
+        if hasattr(self, "quality_status") and self.catalogs:
+            self.cancel_quality()
+            self.quality_indexes.clear()
+            if self.settings.auto_review_imports:
+                self.queue_quality(self.catalogs)
+            self.update_quality_view()
         if hasattr(self, "api_status"):
             service = self.settings.model or provider_for(self.settings).name
             self.api_status.set_label(f"AI · {service}" if is_configured(self.settings) else "AI inte konfigurerad")
@@ -181,6 +196,18 @@ class Window(Adw.ApplicationWindow):
         self.completion = Gtk.ProgressBar(show_text=True, text="0 % översatt", hexpand=True, valign=Gtk.Align.CENTER)
         summary.append(self.completion)
         root.append(summary)
+        self.quality_status = label("Importera en fil för att se kvalitetsstatistik.", "dim-label", wrap=True)
+        self.quality_status.set_margin_start(18)
+        self.quality_status.set_margin_end(18)
+        self.quality_status.set_margin_bottom(8)
+        root.append(self.quality_status)
+        quality_controls = Gtk.Box(spacing=8, margin_start=18, margin_end=18, margin_bottom=8)
+        self.quality_bar = Gtk.ProgressBar(show_text=True, hexpand=True, visible=False)
+        self.quality_stop = button("Avbryt kvalitetsgranskning", self.cancel_quality)
+        self.quality_stop.set_visible(False)
+        quality_controls.append(self.quality_bar)
+        quality_controls.append(self.quality_stop)
+        root.append(quality_controls)
         root.append(Gtk.Separator())
         self.stack = Gtk.Stack(vexpand=True)
         root.append(self.stack)
@@ -203,7 +230,7 @@ class Window(Adw.ApplicationWindow):
         self.search.connect("search-changed", lambda _: self.filter_units())
         left.append(self.search)
         self.filter = Gtk.DropDown.new_from_strings([title for _, title in FILTERS])
-        self.filter.set_tooltip_text("Ändringar sedan import jämförs med filen när den öppnades, även efter sparning.")
+        self.filter.set_tooltip_text("Kvalitetsfilter visar hittills hittade avvikelser. Granska fil uppdaterar alla strängar. Ändringar sedan import jämförs även efter sparning.")
         self.filter.connect("notify::selected", lambda *_: self.filter_units())
         left.append(self.filter)
         marked_controls = Gtk.Box(spacing=6)
@@ -428,8 +455,14 @@ class Window(Adw.ApplicationWindow):
 
     def tick_progress(self):
         self.flush_progress()
+        update = self.quality_progress.take()
+        if update and self.quality_meter:
+            text, current, total = update
+            self.quality_meter.update(current, total)
+            self.quality_bar.set_tooltip_text(text)
         for meter, bar in ((self.job_meter, self.job_bar), (self.resource_meter, self.resource_bar),
-                           (self.check_meter, self.check_bar), (self.suggestion_meter, self.suggestion_bar)):
+                           (self.check_meter, self.check_bar), (self.suggestion_meter, self.suggestion_bar),
+                           (self.quality_meter, self.quality_bar)):
             visible = meter is not None and meter.visible()
             bar.set_visible(visible)
             if visible:
@@ -439,8 +472,10 @@ class Window(Adw.ApplicationWindow):
                 else:
                     bar.set_fraction(meter.fraction)
                     bar.set_text(f"{meter.current} av {meter.total} · {meter.fraction:.0%}")
+        self.refresh_statistics_views(progress_only=True)
+        self.quality_stop.set_visible(self.quality_meter is not None and self.quality_meter.visible())
         self.resource_stop.set_visible(self.resource_meter is not None and self.resource_meter.visible())
-        if self.closed or not any((self.job_meter, self.resource_meter, self.check_meter, self.suggestion_meter)):
+        if self.closed or not any((self.job_meter, self.resource_meter, self.check_meter, self.suggestion_meter, self.quality_meter)):
             self.progress_timer = None
             return False
         return True
@@ -483,6 +518,7 @@ class Window(Adw.ApplicationWindow):
                         self.resource_status.set_tooltip_text("\n".join(errors))
                         self.toast("Vissa språkresurser kunde inte uppdateras. Tillgänglig cache används.")
                     self.resource_status.set_label(summary)
+                    self.refresh_services()
                     self.schedule_check()
                     self.refresh_suggestions()
                 except Exception as exc:
@@ -592,6 +628,10 @@ class Window(Adw.ApplicationWindow):
         self.status.set_label(f"{len(new)} filer importerades" + (" · importen avbröts" if result.cancelled else ""))
         if result.errors:
             self.show_report("Importresultat", result.errors)
+        if new and self.settings.auto_review_imports:
+            self.queue_quality(new)
+        if new:
+            self.show_statistics(catalogs=new, title="Importstatistik")
         if new and not result.cancelled:
             if self.settings.show_import_guide or any(c.language and not c.language.lower().startswith("sv") for c in new):
                 ImportGuide(self, new).present()
@@ -599,12 +639,88 @@ class Window(Adw.ApplicationWindow):
                 self.start_workflow(new, self.settings.import_purpose, self.settings.import_automatic,
                                     self.settings.automatic_use_ai)
 
+    def quality_index(self, catalog):
+        return self.quality_indexes.setdefault(catalog, ReviewIndex())
+
+    def quality_groups(self, catalog, unit):
+        return self.quality_index(catalog).groups(unit)
+
+    def update_quality_view(self, *, refilter=False):
+        if not self.catalog:
+            return
+        self.quality_status.set_label(self.quality_index(self.catalog).summary(self.catalog))
+        self.refresh_statistics_views()
+        kind = FILTERS[self.filter.get_selected()][0]
+        if refilter and kind.startswith("quality-"):
+            query = self.search.get_text().casefold()
+            expected = [u for u in self.catalog.units
+                        if matches(u, kind, quality_groups=self.quality_groups(self.catalog, u))
+                        and (not query or query in "\n".join([u.source, *u.targets, u.context, u.notes]).casefold())]
+            if [id(row.unit) for row in self.unit_store] != [id(u) for u in expected]:
+                self.filter_units()
+
+    def queue_quality(self, catalogs):
+        for catalog in catalogs:
+            if (catalog is not self.quality_running or self.quality_cancel.is_set()) and catalog not in self.quality_queue:
+                self.quality_queue.append(catalog)
+                self.quality_index(catalog).state = "Väntar på kvalitetsgranskning"
+        self.start_quality()
+
+    def start_quality(self):
+        if self.closed or self.quality_running is not None or not self.quality_queue:
+            return
+        catalog = self.quality_queue.pop(0)
+        self.quality_running = catalog
+        self.quality_cancel = threading.Event()
+        cancel, quality = self.quality_cancel, self.quality
+        index = self.quality_index(catalog)
+        index.state = "Kvalitetsgranskning pågår"
+        self.quality_progress.take()
+        self.quality_meter = ProgressState()
+        self.start_progress_timer()
+        self.update_quality_view()
+
+        def run():
+            snapshot = copy.deepcopy(catalog)
+            issues = quality.catalog(snapshot, cancel=cancel, progress=self.quality_progress.put)
+            return snapshot, issues
+
+        def done(future):
+            def finish():
+                self.quality_running = None
+                self.quality_meter = None
+                self.quality_bar.set_visible(False)
+                self.quality_stop.set_visible(False)
+                try:
+                    snapshot, issues = future.result()
+                    if not cancel.is_set() and quality is self.quality:
+                        index.apply(catalog, snapshot, issues)
+                    else:
+                        index.state = "Kvalitetsgranskningen behöver köras igen"
+                except Exception as exc:
+                    index.state = "Kvalitetsgranskningen avbröts" if cancel.is_set() else f"Kvalitetsgranskningen misslyckades: {exc}"
+                self.update_quality_view(refilter=True)
+                self.start_quality()
+            self.dispatch(finish)
+        self.review_executor.submit(run).add_done_callback(done)
+
+    def cancel_quality(self):
+        self.quality_cancel.set()
+        for catalog in self.quality_queue:
+            self.quality_index(catalog).state = "Kvalitetsgranskningen avbröts"
+        self.quality_queue.clear()
+        if self.quality_running:
+            self.quality_index(self.quality_running).state = "Avbryter kvalitetsgranskningen"
+        self.update_quality_view()
+
     def add_copies(self, catalogs):
         first = len(self.catalogs)
         self.catalogs.extend(catalogs)
         self.refresh_files()
         self.file_picker.set_selected(first)
         self.select_catalog()
+        if self.settings.auto_review_imports:
+            self.queue_quality(catalogs)
 
     def refresh_files(self):
         self.loading = True
@@ -702,7 +818,8 @@ class Window(Adw.ApplicationWindow):
         query = self.search.get_text().casefold()
         kind = FILTERS[self.filter.get_selected()][0]
         rows = [(number, u) for number, u in enumerate(self.catalog.units, 1)
-                if matches(u, kind, marked=kind == "marked" and (id(self.catalog), u.key) in self.marked)
+                if matches(u, kind, marked=kind == "marked" and (id(self.catalog), u.key) in self.marked,
+                           quality_groups=self.quality_groups(self.catalog, u) if kind.startswith("quality-") else ())
                  and (not query or query in "\n".join([u.source, *u.targets, u.context, u.notes]).casefold())]
         units = [unit for _, unit in rows]
         self.loading = True
@@ -803,7 +920,10 @@ class Window(Adw.ApplicationWindow):
         unit, variant = copy.deepcopy(self.unit), self.variant
         if self.check_future:
             self.check_future.cancel()
-        future = self.check_executor.submit(self.quality.check, unit, variant)
+        catalog, quality = self.catalog, self.quality
+        def check():
+            return [issue for form in range(len(unit.targets)) for issue in quality.check(unit, form)]
+        future = self.check_executor.submit(check)
         self.check_future = future
         self.check_meter = ProgressState()
         self.start_progress_timer()
@@ -817,7 +937,12 @@ class Window(Adw.ApplicationWindow):
                 self.check_meter = None
                 self.check_bar.set_visible(False)
                 try:
-                    self.show_issues(f.result())
+                    issues = f.result()
+                    if quality is not self.quality or signature(unit) != signature(self.unit):
+                        return
+                    self.quality_index(catalog).record(unit, issues)
+                    self.show_issues([issue for issue in issues if issue.variant == variant])
+                    self.update_quality_view(refilter=True)
                 except Exception as exc:
                     clear(self.issue_box)
                     self.issue_box.append(label(f"Kontrollen kunde inte köras: {exc}", "warning", wrap=True))
@@ -1046,6 +1171,7 @@ class Window(Adw.ApplicationWindow):
         dialog.present()
 
     def review_catalogs(self, catalogs):
+        quality = self.quality
         def run(cancel):
             results = []
             for original in catalogs:
@@ -1053,15 +1179,22 @@ class Window(Adw.ApplicationWindow):
                     break
                 catalog = copy.deepcopy(original)
                 self.progress_message("Granskar " + catalog.name)
-                results.extend((catalog.name, issue) for issue in self.quality.catalog(catalog, cancel=cancel, progress=self.progress_message))
+                results.append((original, catalog, quality.catalog(catalog, cancel=cancel, progress=self.progress_message)))
             return results
 
         def done(results):
-            self.diagnostics = [{"file": name, **asdict(issue)} for name, issue in results]
+            if quality is not self.quality:
+                self.toast("Inställningarna ändrades under granskningen. Granska filen igen.")
+                return
+            self.diagnostics = []
+            for original, snapshot, issues in results:
+                self.quality_index(original).apply(original, snapshot, issues)
+                self.diagnostics.extend({"file": original.name, **asdict(issue)} for issue in issues)
             self.report_ready = True
-            self.show_report("Granskning av kataloger", [f"{name}: {i.message}" for name, i in results]
+            self.update_quality_view(refilter=True)
+            self.show_report("Granskning av kataloger", [f"{i['file']}: {i['message']}" for i in self.diagnostics]
                              or ["De aktiva kvalitetskontrollerna hittade inga avvikelser."])
-            self.status.set_label(f"Granskningen är klar · {len(results)} avvikelser")
+            self.status.set_label(f"Granskningen är klar · {len(self.diagnostics)} avvikelser")
         self.job("Granskar kataloger…", run, done)
 
     def show_report(self, title, messages, parent=None):
@@ -1189,36 +1322,97 @@ class Window(Adw.ApplicationWindow):
 
     def update_statistics(self):
         total = statistics(self.catalogs)
+        self.update_quality_view()
         for key, widget in self.statistics_labels.items():
             widget.set_label(f"{getattr(total, key):,}".replace(",", " "))
         self.completion.set_fraction(total.fraction)
         self.completion.set_text(f"{total.fraction:.0%} översatt")
         self.completion.set_tooltip_text("Alla importerade filer. En sträng räknas som översatt när alla dess plural- och längdvarianter är ifyllda.")
 
-    def show_statistics(self):
-        total = statistics(self.catalogs)
-        window = Adw.Window(transient_for=self, title="Statistik", default_width=850, default_height=600)
+    def refresh_statistics_views(self, *, progress_only=False):
+        for refresh in list(self.statistics_views):
+            refresh(progress_only)
+
+    def show_statistics(self, *, catalogs=None, title="Statistik"):
+        catalogs = list(self.catalogs if catalogs is None else catalogs)
+        window = Adw.Window(transient_for=self, title=title, default_width=850, default_height=600, destroy_with_parent=True)
         root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         root.append(Adw.HeaderBar())
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=18,
                       margin_start=24, margin_end=24, margin_top=18, margin_bottom=24)
-        box.append(label("Arbetet i siffror", "title-1"))
-        box.append(label(f"{total.files} filer · {total.total} strängar · {total.source_words} ord i källtexterna", "dim-label"))
-        box.append(label(f"{total.translated} översatta  ·  {total.reviewed} granskade  ·  {total.needs_review} att granska  ·  {total.remaining} återstår", wrap=True))
-        box.append(label(f"Plural- och längdvarianter: {total.translated_variants} av {total.variants} ifyllda."))
-        box.append(label(f"Tillämpade förslag denna session: {self.session_statistics['memory']} från språkresurser, {self.session_statistics['ai']} från AI."))
-        grid = Gtk.Grid(column_spacing=22, row_spacing=12)
-        for col, title in enumerate(["Fil", "Strängar", "Översatta", "Granskade", "Kvar"]):
-            grid.attach(label(title, "heading"), col, 0, 1, 1)
-        for row, catalog in enumerate(self.catalogs, 1):
-            counts = statistics([catalog])
-            for col, value in enumerate([catalog.name, counts.total, counts.translated, counts.reviewed, counts.remaining]):
-                grid.attach(label(str(value)), col, row, 1, 1)
-        box.append(grid)
-        box.append(label("Statistiken omfattar osparade ändringar. Granskad betyder manuellt godkänd. JSON:s granskningsstatus lagras lokalt i .ordverk när filen sparas.", "dim-label", wrap=True))
+        heading = label(title, "title-1")
+        heading.set_selectable(False)
+        box.append(heading)
+        totals = label(wrap=True)
+        box.append(totals)
+        progress = Gtk.ProgressBar(show_text=True, visible=False)
+        box.append(progress)
+        stop = button("Avbryt kvalitetsgranskning", self.cancel_quality)
+        stop.set_visible(False)
+        box.append(stop)
+        file_labels = []
+        for catalog in catalogs:
+            heading = label(catalog.name, "heading")
+            box.append(heading)
+            counts_label, quality_label = label(wrap=True), label(wrap=True)
+            box.append(counts_label)
+            box.append(quality_label)
+            file_labels.append((catalog, counts_label, quality_label))
+        box.append(label("Kvalitetssiffrorna räknar strängar, inte antal anmärkningar. En sträng kan ingå i flera grupper. Stavfel och avvikande skiftläge behöver bedömas i sitt sammanhang. Strängar som inte har kontrollerats räknas inte som felfria.", "dim-label", wrap=True))
+        box.append(label("Granskad betyder manuellt godkänd. Statistiken omfattar osparade ändringar.", "dim-label", wrap=True))
+        close_button = button("Stäng", window.close)
+        box.append(close_button)
         root.append(scroll(box, vexpand=True))
         window.set_content(root)
+
+        def refresh(progress_only=False):
+            meter = self.quality_meter if self.quality_running in catalogs else None
+            visible = meter is not None and meter.visible()
+            progress.set_visible(visible)
+            stop.set_visible(visible)
+            if visible:
+                if meter.fraction is None:
+                    progress.set_text("Granskar filen…")
+                    progress.pulse()
+                else:
+                    progress.set_fraction(meter.fraction)
+                    progress.set_text(f"{self.quality_running.name} · {meter.current} av {meter.total} · {meter.fraction:.0%}")
+            if progress_only:
+                return
+            total = statistics(catalogs)
+            file_word = "fil" if total.files == 1 else "filer"
+            engines = [name for name, enabled in (("Hunspell", self.settings.use_hunspell), ("Aspell", self.settings.use_aspell)) if enabled]
+            spelling = " och ".join(engines) if engines else "inbyggda regler; Hunspell och Aspell är avstängda"
+            totals.set_label(f"{total.files} {file_word} · {total.total} strängar · {total.source_words} ord i källtexterna\n"
+                             f"{total.translated} översatta · {total.reviewed} granskade · {total.needs_review} att granska · {total.remaining} återstår\n"
+                             f"Plural- och längdvarianter: {total.translated_variants} av {total.variants} ifyllda.\n"
+                             f"Tillämpade förslag denna session: {self.session_statistics['memory']} från språkresurser, {self.session_statistics['ai']} från AI.\n"
+                             f"Stavningskontroll: {spelling}.")
+            for catalog, counts_label, quality_label in file_labels:
+                counts = statistics([catalog])
+                index = self.quality_index(catalog)
+                quality_counts = index.counts(catalog)
+                counts_label.set_label(f"{counts.total} strängar · {counts.translated} översatta · {counts.reviewed} granskade · {counts.remaining} återstår")
+                quality_label.set_label(index.summary(catalog) + "\n" + " · ".join(
+                    f"{quality_counts[key]} {caption}" for key, caption in (
+                        ("placeholders", "med fel i platshållare"), ("markup", "med fel i taggar"),
+                        ("punctuation", "med avvikande skiljetecken"), ("whitespace", "med blankstegs- eller radbrytningsfel"),
+                        ("numbers", "med avvikande tal eller datum"), ("terminology", "med terminologianmärkningar"))))
+                if index.file_issues:
+                    quality_label.set_label(quality_label.get_label() + f"\n{len(index.file_issues)} anmärkningar för hela filen eller granskningsverktygen:\n" +
+                                            "\n".join(issue.message for issue in index.file_issues[:5]) +
+                                            ("\nFler detaljer finns under Granska fil." if len(index.file_issues) > 5 else ""))
+                quality_label.set_tooltip_text("\n".join(issue.message for issue in index.file_issues))
+        def close(*_):
+            if refresh in self.statistics_views:
+                self.statistics_views.remove(refresh)
+            return False
+        window.connect("close-request", close)
+        self.statistics_views.append(refresh)
+        refresh()
         window.present()
+        close_button.grab_focus()
+        return window
 
     def move(self, delta):
         count = self.unit_store.get_n_items()
@@ -1310,6 +1504,10 @@ class Window(Adw.ApplicationWindow):
             GLib.source_remove(self.check_timer)
             self.check_timer = None
         self.executor.shutdown(wait=False, cancel_futures=True)
+        self.quality_cancel.set()
+        self.quality_queue.clear()
+        self.statistics_views.clear()
+        self.review_executor.shutdown(wait=False, cancel_futures=True)
         self.check_executor.shutdown(wait=False, cancel_futures=True)
         self.destroy()
 
