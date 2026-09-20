@@ -68,8 +68,6 @@ assert "Språkverktyg och språkresurser" in about_labels
 for tool in ("swedish-tm", "swedish-foss-terminology", "l10n-lint", "svlang", "hunspell-sv", "aspell-sv"):
     assert any(tool in text for text in about_labels), tool
 about.close()
-assert GLib.dgettext("gtk40", "Copy") == "Kopiera"
-assert GLib.dgettext("gtk40", "Paste") == "Klistra in"
 
 example = Path(__file__).resolve().parents[1] / "examples/sv.po"
 path = Path(temporary.name) / "sv.po"

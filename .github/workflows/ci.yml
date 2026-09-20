@@ -87,6 +87,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Installera Fedora-byggverktyg
         run: |
+          # Containeravbildningen kan annars filtrera bort svenska språkfiler.
+          printf '%%_install_langs all\n' > /etc/rpm/macros.ordverk-ci
           dnf install -y rpm-build rpmdevtools python3-devel python3-setuptools python3-setuptools_scm python3-build python3-installer pyproject-rpm-macros desktop-file-utils rpmlint git glibc-langpack-en
       - name: Bygg SRPM och RPM
         run: |
