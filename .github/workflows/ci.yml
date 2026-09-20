@@ -5,6 +5,12 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+env:
+  # GUI-testerna körs med Xvfb utan skrivbord eller fysisk GPU.
+  GDK_BACKEND: x11
+  GSK_RENDERER: cairo
+  GTK_A11Y: test
+  LIBGL_ALWAYS_SOFTWARE: "1"
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -12,34 +18,33 @@ jobs:
   linux:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
       - name: Installera GTK och testverktyg
         run: |
           sudo apt-get update
-          sudo apt-get install -y python3-venv python3-gi gir1.2-gtk-4.0 gir1.2-adw-1 hunspell aspell xvfb desktop-file-utils appstream
+          sudo apt-get install -y python3-venv python3-gi gir1.2-gtk-4.0 gir1.2-adw-1 hunspell aspell xvfb dbus-daemon desktop-file-utils appstream
           ./scripts/install.sh
           .venv/bin/python -m pip install '.[dev]'
       - name: Kvalitetskontroller och GTK
         env:
           ORDVERK_HOME: ${{ runner.temp }}/ordverk-cache
-          GSK_RENDERER: cairo
         run: |
           .venv/bin/python -m pytest -q
           .venv/bin/python -m ruff check src
-          xvfb-run -a .venv/bin/python tests/gtk_smoke.py
+          dbus-run-session -- xvfb-run -a .venv/bin/python tests/gtk_smoke.py
           desktop-file-validate data/io.github.yeager.Ordverk.desktop
           appstreamcli validate --no-net data/io.github.yeager.Ordverk.metainfo.xml
           .venv/bin/python -m build
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: python
           path: dist/*
   gitleaks:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
       - name: Skanna hela Git-historiken
@@ -52,7 +57,7 @@ jobs:
     runs-on: ubuntu-24.04
     container: debian:trixie
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Installera Debian-byggverktyg
         run: |
           apt-get update
@@ -68,10 +73,10 @@ jobs:
           lintian --fail-on error artifacts/deb/*.changes
       - name: Verifiera installerade paket
         run: |
-          apt-get install -y /tmp/native/*.deb xvfb
+          apt-get install -y /tmp/native/*.deb xvfb dbus-daemon
           ordverk --version
-          GSK_RENDERER=cairo xvfb-run -a python3 scripts/package_smoke.py
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+          dbus-run-session -- xvfb-run -a python3 scripts/package_smoke.py
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: deb
           path: artifacts/deb/*
@@ -79,7 +84,7 @@ jobs:
     runs-on: ubuntu-24.04
     container: fedora:44
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Installera Fedora-byggverktyg
         run: |
           dnf install -y rpm-build rpmdevtools python3-devel python3-setuptools python3-setuptools_scm python3-build python3-installer pyproject-rpm-macros desktop-file-utils rpmlint git glibc-langpack-en
@@ -97,10 +102,10 @@ jobs:
           rpmlint -c packaging/rpm/rpmlint.toml artifacts/rpm/*.rpm
       - name: Verifiera installerade paket
         run: |
-          dnf install -y /tmp/rpmbuild/RPMS/noarch/*.rpm xorg-x11-server-Xvfb
+          dnf install -y /tmp/rpmbuild/RPMS/noarch/*.rpm xorg-x11-server-Xvfb dbus-daemon
           ordverk --version
-          GSK_RENDERER=cairo xvfb-run -a python3 scripts/package_smoke.py
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+          dbus-run-session -- xvfb-run -a python3 scripts/package_smoke.py
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: rpm
           path: artifacts/rpm/*
