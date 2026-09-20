@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Name=Ordverk
+GenericName=Svensk översättningsverkstad
+Comment=Översätt och granska PO, TS, XLIFF och JSON med svenska språkresurser
+Exec=ordverk %U
+Icon=io.github.yeager.Ordverk
+Terminal=false
+StartupNotify=true
+StartupWMClass=io.github.yeager.Ordverk
+Categories=Development;Translation;GTK;
+MimeType=text/x-gettext-translation;text/x-gettext-translation-template;application/x-linguist;application/x-xliff;application/xliff+xml;application/json;
+Keywords=översättning;lokalisering;svenska;språkgranskning;PO;XLIFF;

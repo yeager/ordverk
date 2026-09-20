@@ -1,0 +1,3 @@
+title = "Ordverk secret scanning"
+[extend]
+useDefault = true

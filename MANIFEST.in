@@ -1,0 +1,11 @@
+include README.md THIRD_PARTY.md LICENSE run.sh
+recursive-include scripts *.sh *.py
+recursive-include data *.desktop *.png *.txt
+recursive-include docs *.png *.md
+recursive-include examples *.po *.ts *.xlf *.json
+recursive-include tests *.py
+recursive-include data *.xml *.1
+recursive-include debian *
+recursive-include packaging *
+recursive-include .github *.yml
+include .gitleaks.toml

@@ -1,0 +1,23 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: Ordverk
+Upstream-Contact: Daniel Nylander <daniel@danielnylander.se>
+Source: https://github.com/yeager/ordverk
+
+Files: *
+Copyright: 2026 Daniel Nylander
+License: GPL-3+
+ This program is free software: you can redistribute it and/or modify
+ it under the terms of the GNU General Public License as published by
+ the Free Software Foundation, either version 3 of the License, or
+ (at your option) any later version.
+ .
+ On Debian systems, the complete text of the GNU General Public License
+ version 3 can be found in /usr/share/common-licenses/GPL-3.
+
+Files: data/io.github.yeager.Ordverk.metainfo.xml
+Copyright: 2026 Daniel Nylander
+License: CC0-1.0
+ To the extent possible under law, the author has waived all copyright
+ and related or neighboring rights to this metadata.
+ .
+ See https://creativecommons.org/publicdomain/zero/1.0/legalcode

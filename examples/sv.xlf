@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xliff xmlns="urn:oasis:names:tc:xliff:document:2.0" version="2.0" srcLang="en" trgLang="sv">
+  <file id="main">
+    <unit id="welcome">
+      <notes><note>Welcome heading; keep the user's name placeholder.</note></notes>
+      <segment state="initial"><source>Welcome, <ph id="1" equiv="{name}"/>!</source><target/></segment>
+    </unit>
+    <unit id="format"><segment><source>Make <pc id="2" type="fmt">important</pc> text stand out.</source><target/></segment></unit>
+  </file>
+</xliff>

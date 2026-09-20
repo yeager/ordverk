@@ -1,0 +1,40 @@
+.TH ORDVERK 1 "September 2026" "Ordverk 0.2" "Användarkommandon"
+.SH NAMN
+ordverk \- svensk översättningsverkstad
+.SH SYNOPSIS
+.B ordverk
+.RI [ filer ...]
+.br
+.B ordverk --check
+.RI filer ...
+.br
+.B ordverk --update-resources
+.RI [ resurser ...]
+.SH BESKRIVNING
+Ordverk redigerar och granskar PO, Qt TS, XLIFF och JSON med svenska
+språkresurser och ett valfritt OpenAI-kompatibelt API.
+Gränssnittet finns endast på svenska.
+.SH ALTERNATIV
+.TP
+.B --version
+Visa programversionen.
+.TP
+.B --check
+Granska filer och returnera en felkod om blockerande fel hittas.
+.TP
+.B --update-resources
+Uppdatera statiska språkdata. Valbara resurser är tm, tm-small, terms,
+hunspell och aspell. Utan resursnamn uppdateras samtliga resurser.
+.SH MILJÖ
+.TP
+.B ORDVERK_HOME
+Annan katalog för cache och inställningar än ~/.ordverk.
+.TP
+.B ORDVERK_API_KEY
+API-nyckel för den konfigurerade AI-tjänsten.
+.SH FILER
+.TP
+.B ~/.ordverk/
+Inställningar, översättningsminne, terminologi, ordlistor och e-postutkast.
+.SH FELRAPPORTER
+https://github.com/yeager/ordverk/issues

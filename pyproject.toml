@@ -1,0 +1,48 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ordverk"
+version = "0.2"
+description = "En svensk översättningsverkstad för Linux"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "GPL-3.0-or-later"
+authors = [{name = "Daniel Nylander", email = "daniel@danielnylander.se"}]
+dependencies = ["polib>=1.2", "lxml>=5", "l10n-lint>=1.21.4", "svlang>=0.2.2"]
+
+[project.optional-dependencies]
+secrets = ["keyring>=25"]
+dev = ["pytest>=8", "ruff>=0.11", "build>=1"]
+
+[project.scripts]
+ordverk = "ordverk.__main__:main"
+
+[project.urls]
+Homepage = "https://github.com/yeager/ordverk"
+Issues = "https://github.com/yeager/ordverk/issues"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"
+
+[tool.setuptools.data-files]
+"share/applications" = ["data/io.github.yeager.Ordverk.desktop"]
+"share/pixmaps" = ["data/io.github.yeager.Ordverk.png"]
+"share/metainfo" = ["data/io.github.yeager.Ordverk.metainfo.xml"]
+"share/man/man1" = ["data/ordverk.1"]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]
+
+[tool.ruff.lint.per-file-ignores]
+"src/ordverk/ui.py" = ["E402"]
+"src/ordverk/dialogs.py" = ["E402"]

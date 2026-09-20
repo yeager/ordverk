@@ -1,0 +1,106 @@
+name: Linux, DEB, RPM och Gitleaks
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  linux:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - name: Installera GTK och testverktyg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-venv python3-gi gir1.2-gtk-4.0 gir1.2-adw-1 hunspell aspell xvfb desktop-file-utils appstream
+          ./scripts/install.sh
+          .venv/bin/python -m pip install '.[dev]'
+      - name: Kvalitetskontroller och GTK
+        env:
+          ORDVERK_HOME: ${{ runner.temp }}/ordverk-cache
+          GSK_RENDERER: cairo
+        run: |
+          .venv/bin/python -m pytest -q
+          .venv/bin/python -m ruff check src
+          xvfb-run -a .venv/bin/python tests/gtk_smoke.py
+          desktop-file-validate data/io.github.yeager.Ordverk.desktop
+          appstreamcli validate --no-net data/io.github.yeager.Ordverk.metainfo.xml
+          .venv/bin/python -m build
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: python
+          path: dist/*
+  gitleaks:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - name: Skanna hela Git-historiken
+        run: |
+          curl -fLsS https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz -o "$RUNNER_TEMP/gitleaks.tar.gz"
+          echo '551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  '"$RUNNER_TEMP/gitleaks.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/gitleaks.tar.gz" -C "$RUNNER_TEMP" gitleaks
+          "$RUNNER_TEMP/gitleaks" git --redact --verbose --exit-code 1 .
+  deb:
+    runs-on: ubuntu-24.04
+    container: debian:trixie
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Installera Debian-byggverktyg
+        run: |
+          apt-get update
+          apt-get install -y build-essential debhelper dh-sequence-python3 pybuild-plugin-pyproject python3-all python3-setuptools python3-setuptools-scm python3-build python3-installer python3-venv ca-certificates desktop-file-utils lintian
+      - name: Bygg källpaket och DEB-paket
+        run: |
+          python3 scripts/native_sources.py /tmp/native
+          for source in /tmp/native/l10n-lint-* /tmp/native/svlang-* /tmp/native/ordverk-0.2; do
+            if [ -d "$source" ]; then (cd "$source" && dpkg-buildpackage -us -uc); fi
+          done
+          mkdir -p artifacts/deb
+          cp /tmp/native/*.deb /tmp/native/*.dsc /tmp/native/*.tar.* /tmp/native/*.buildinfo /tmp/native/*.changes /tmp/native/sources.json artifacts/deb/
+          lintian --fail-on error artifacts/deb/*.changes
+      - name: Verifiera installerade paket
+        run: |
+          apt-get install -y /tmp/native/*.deb xvfb
+          ordverk --version
+          GSK_RENDERER=cairo xvfb-run -a python3 scripts/package_smoke.py
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: deb
+          path: artifacts/deb/*
+  rpm:
+    runs-on: ubuntu-24.04
+    container: fedora:44
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Installera Fedora-byggverktyg
+        run: |
+          dnf install -y rpm-build rpmdevtools python3-devel python3-setuptools python3-setuptools_scm python3-build python3-installer pyproject-rpm-macros desktop-file-utils rpmlint git
+      - name: Bygg SRPM och RPM
+        run: |
+          python3 scripts/native_sources.py /tmp/native
+          mkdir -p /tmp/rpmbuild/SOURCES /tmp/rpmbuild/SPECS
+          cp /tmp/native/l10n-lint-*.tar.gz /tmp/native/svlang-*.tar.gz /tmp/native/ordverk-0.2.tar.gz /tmp/rpmbuild/SOURCES/
+          cp /tmp/native/*.spec packaging/rpm/ordverk.spec /tmp/rpmbuild/SPECS/
+          for spec in /tmp/rpmbuild/SPECS/*.spec; do
+            rpmbuild --define '_topdir /tmp/rpmbuild' -ba "$spec"
+          done
+          mkdir -p artifacts/rpm
+          cp /tmp/rpmbuild/RPMS/noarch/*.rpm /tmp/rpmbuild/SRPMS/*.rpm /tmp/native/sources.json artifacts/rpm/
+          rpmlint -c packaging/rpm/rpmlint.toml artifacts/rpm/*.rpm
+      - name: Verifiera installerade paket
+        run: |
+          dnf install -y /tmp/rpmbuild/RPMS/noarch/*.rpm xorg-x11-server-Xvfb
+          ordverk --version
+          GSK_RENDERER=cairo xvfb-run -a python3 scripts/package_smoke.py
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: rpm
+          path: artifacts/rpm/*

@@ -1,0 +1,6 @@
+{
+  "@locale": "sv",
+  "menu": {"save": "Spara", "cancel": "", "preferences": ""},
+  "greeting": "Hej, {name}!",
+  "files": {"one": "{count} fil", "other": ""}
+}

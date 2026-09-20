@@ -1,0 +1,6 @@
+{
+  "@locale": "en",
+  "menu": {"save": "Save", "cancel": "Cancel", "preferences": "Preferences"},
+  "greeting": "Hello, {name}!",
+  "files": {"one": "{count} file", "other": "{count} files"}
+}
