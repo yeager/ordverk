@@ -258,10 +258,23 @@ class ResourceStore:
             path = self.fetch("swedish-foss-terminology", "termbank-flat.csv", cancel)
             self.import_terms(path, "Swedish FOSS Terminology · CC BY 4.0", cancel)
         elif component == "hunspell":
+            self.preserve_dictionary("hunspell")
             for name in ("sv_SE.aff", "sv_SE.dic", "LICENSE"):
                 progress(f"Hämtar hunspell-sv: {name}")
                 self.fetch("hunspell-sv", name, cancel)
+            folder = self.directory / "upstream/hunspell-sv"
+            lines = (folder / "sv_SE.dic").read_bytes().splitlines()
+            if not lines or not lines[0].strip().isdigit() or b"SET " not in (folder / "sv_SE.aff").read_bytes():
+                raise ValueError("Hunspell-filerna har inte ett giltigt ordlisteformat. Föregående version används.")
+            if shutil.which("hunspell"):
+                result = subprocess.run(["hunspell", "-l", "-d", str(folder / "sv_SE")], input="ord\n",
+                                        encoding="utf-8", capture_output=True, timeout=20)
+                if result.returncode:
+                    raise ValueError("Hunspell kunde inte läsa den nya ordlistan. Föregående version används.")
+            check_cancel(cancel)
+            self.activate_dictionary("hunspell", folder)
         elif component == "aspell":
+            self.preserve_dictionary("aspell")
             if not shutil.which("aspell"):
                 raise ValueError("Installera Aspell från din Linux-distribution först.")
             for name in ("sv.wl", "sv.dat", "sv.multi", "sv_phonet.dat", "COPYING", "COPYING.LESSER",
@@ -272,6 +285,7 @@ class ResourceStore:
             build_hash = digest(b"".join((folder / name).read_bytes() for name in ("sv.wl", "sv.dat", "sv_phonet.dat")))
             stamp = folder / "build.sha256"
             if (folder / "sv.rws").exists() and stamp.exists() and stamp.read_text() == build_hash:
+                self.activate_dictionary("aspell", folder)
                 return self.counts()
             progress("Bygger Aspells svenska ordlista för den här datorn")
             temporary = folder / "sv.build.rws"
@@ -286,6 +300,7 @@ class ResourceStore:
                 check_cancel(cancel)
                 temporary.replace(folder / "sv.rws")
                 atomic_write(stamp, build_hash.encode())
+                self.activate_dictionary("aspell", folder)
             finally:
                 temporary.unlink(missing_ok=True)
         else:
@@ -307,8 +322,40 @@ class ResourceStore:
         atomic_write(Path(path), str(po).encode(), 0o644)
 
     def dictionary_paths(self):
-        return (self.directory / "upstream/hunspell-sv/sv_SE",
-                self.directory / "upstream/aspell-sv/swedish")
+        active = self.active_dictionaries()
+        return (self.directory / active.get("hunspell", "upstream/hunspell-sv") / "sv_SE",
+                self.directory / active.get("aspell", "upstream/aspell-sv/swedish"))
+
+    def active_dictionaries(self):
+        try:
+            return json.loads((self.directory / "dictionaries.json").read_text())
+        except (OSError, ValueError):
+            return {}
+
+    def preserve_dictionary(self, engine):
+        if engine in self.active_dictionaries():
+            return
+        hunspell, aspell = self.dictionary_paths()
+        folder = hunspell.parent if engine == "hunspell" else aspell
+        required = ("sv_SE.aff", "sv_SE.dic") if engine == "hunspell" else ("sv.rws", "sv.dat")
+        if all((folder / name).is_file() for name in required):
+            self.activate_dictionary(engine, folder)
+
+    def activate_dictionary(self, engine, folder):
+        """Switch a whole immutable dictionary generation in one atomic pointer update."""
+        names = ("sv_SE.aff", "sv_SE.dic", "LICENSE") if engine == "hunspell" else (
+            "sv.rws", "sv.dat", "sv.multi", "sv_phonet.dat", "COPYING", "COPYING.LESSER",
+            "COPYING.GPL2", "COPYING.aspell", "Copyright.aspell", "LICENSE.hunspell")
+        files = [(name, (folder / name).read_bytes()) for name in names if (folder / name).exists()]
+        identity = digest(b"".join(name.encode() + b"\0" + data for name, data in files))
+        generation = self.directory / "dictionaries" / engine / identity
+        generation.mkdir(parents=True, exist_ok=True)
+        for name, data in files:
+            if not (generation / name).exists():
+                atomic_write(generation / name, data)
+        active = self.active_dictionaries()
+        active[engine] = str(generation.relative_to(self.directory))
+        atomic_write(self.directory / "dictionaries.json", json.dumps(active).encode())
 
 
 def term_rows(path):

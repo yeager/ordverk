@@ -4,13 +4,13 @@ Release:        1%{?dist}
 Summary:        Swedish translation workbench for Linux
 License:        GPL-3.0-or-later
 URL:            https://github.com/yeager/ordverk
-Source0:        %{name}-%{version}.tar.gz
+Source0:        https://github.com/yeager/ordverk/releases/download/v%{version}/%{name}-%{version}.tar.gz
 BuildArch:      noarch
 BuildRequires:  python3-devel
 BuildRequires:  pyproject-rpm-macros
 BuildRequires:  python3-setuptools >= 77
 BuildRequires:  desktop-file-utils
-Requires:       python3-gobject
+Requires:       python3dist(pygobject)
 Requires:       gtk4 >= 4.10
 Requires:       libadwaita >= 1.4
 Requires:       python3dist(polib) >= 1.2

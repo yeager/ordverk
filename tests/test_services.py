@@ -257,3 +257,22 @@ def test_cache_offline_retains_data(store, monkeypatch):
     errors = store.update(["tm", "hunspell", "aspell"])
     assert len(errors) == 3
     assert store.memory("Save")[0].target == "Spara"
+
+
+def test_incomplete_dictionary_update_keeps_active_pair(store, monkeypatch):
+    folder = store.directory / "upstream/hunspell-sv"
+    folder.mkdir(parents=True)
+    (folder / "sv_SE.aff").write_text("SET UTF-8\n")
+    (folder / "sv_SE.dic").write_text("1\nfil\n")
+    def fetch(repo, name, cancel=None):
+        if name == "sv_SE.aff":
+            (folder / name).write_text("SET ISO8859-1\n")
+            return folder / name
+        raise OSError("network interrupted")
+    monkeypatch.setattr(store, "fetch", fetch)
+    with pytest.raises(OSError):
+        store.install("hunspell")
+    active, _ = store.dictionary_paths()
+    assert active.parent != folder
+    assert active.with_suffix(".aff").read_text() == "SET UTF-8\n"
+    assert active.with_suffix(".dic").read_text() == "1\nfil\n"

@@ -1,2 +1,2 @@
-# Upstream CLI dependency packages do not yet ship manual pages. Keep all errors active.
-Filters = ["no-manual-page-for-binary", "no-signature"]
+# Upstream release packages are unsigned; SHA-256 checksums accompany the release.
+Filters = ["no-signature"]

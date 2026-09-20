@@ -82,7 +82,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Installera Fedora-byggverktyg
         run: |
-          dnf install -y rpm-build rpmdevtools python3-devel python3-setuptools python3-setuptools_scm python3-build python3-installer pyproject-rpm-macros desktop-file-utils rpmlint git
+          dnf install -y rpm-build rpmdevtools python3-devel python3-setuptools python3-setuptools_scm python3-build python3-installer pyproject-rpm-macros desktop-file-utils rpmlint git glibc-langpack-en
       - name: Bygg SRPM och RPM
         run: |
           python3 scripts/native_sources.py /tmp/native

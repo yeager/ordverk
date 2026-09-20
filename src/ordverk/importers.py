@@ -21,6 +21,10 @@ class Cancelled(Exception):
     pass
 
 
+class ImportLimit(Exception):
+    pass
+
+
 def check_cancel(cancel):
     if cancel and cancel.is_set():
         raise Cancelled("Åtgärden avbröts.")
@@ -158,6 +162,8 @@ def import_sources(sources, *, progress=lambda message: None, cancel: threading.
                     if parsed.hostname == "github.com":
                         for name, url in github_files(str(source), cancel):
                             check_cancel(cancel)
+                            if len(seen) >= MAX_FILES:
+                                raise ImportLimit
                             try:
                                 load(name, download(url, cancel=cancel), origin=url)
                             except (ValueError, OSError) as exc:
@@ -168,6 +174,8 @@ def import_sources(sources, *, progress=lambda message: None, cancel: threading.
                 else:
                     for path in discover(source):
                         check_cancel(cancel)
+                        if len(seen) >= MAX_FILES:
+                            raise ImportLimit
                         try:
                             if path.stat().st_size > MAX_FILE_BYTES:
                                 raise ValueError("Filen är större än 32 MiB.")
@@ -180,4 +188,6 @@ def import_sources(sources, *, progress=lambda message: None, cancel: threading.
             result.errors.append("Inga PO-, TS-, XLIFF- eller JSON-filer hittades.")
     except Cancelled:
         result.cancelled = True
+    except ImportLimit:
+        result.errors.append(f"Högst {MAX_FILES} filer per import. Välj en mindre undermapp för att fortsätta.")
     return result

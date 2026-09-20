@@ -71,16 +71,22 @@ License: {"GPL-3+" if license_name.startswith("GPL") else "Expat"}
         with (folder / "debian/copyright").open("a") as file:
             file.write(" .\n On Debian systems, the full license is available in\n /usr/share/common-licenses/GPL-3.\n")
     write(folder / "debian/docs", "README.md\n")
+    pages = "man/en/l10n-lint.1\nman/en/l10n-lint-gtk.1\n" if name == "l10n-lint" else "data/man/svlang.1\n"
+    write(folder / "debian/manpages", pages)
+    write(folder / f"debian/{binary}.lintian-overrides", "# Distributed by upstream; there is no Debian ITP bug.\ninitial-upload-closes-no-bugs\n")
+    if name == "l10n-lint":
+        with (folder / "debian/copyright").open("a") as file:
+            file.write("\nFiles: *.metainfo.xml\nCopyright: 2026 Daniel Nylander\nLicense: CC0-1.0\n The metadata is dedicated to the public domain under CC0-1.0.\n See https://creativecommons.org/publicdomain/zero/1.0/legalcode\n")
 
 
-def rpm_spec(name, version, license_name, modules, commands):
+def rpm_spec(name, version, license_name, modules, commands, revision):
     return f'''Name:           python-{name}
 Version:        {version}
 Release:        1%{{?dist}}
 Summary:        Swedish localization support library
 License:        {license_name}
 URL:            https://github.com/yeager/{name}
-Source0:        {name}-%{{version}}.tar.gz
+Source0:        https://github.com/yeager/{name}/archive/{revision}.tar.gz#/{name}-%{{version}}.tar.gz
 BuildArch:      noarch
 BuildRequires:  python3-devel
 BuildRequires:  pyproject-rpm-macros
@@ -98,7 +104,8 @@ Python library used by Ordverk for Swedish localization quality checks.
 Includes upstream command-line entry points.
 
 %prep
-%autosetup -n {name}-%{{version}}
+%autosetup -n {name}-{revision}
+''' + ("sed -i '1{/^#!/d;}' l10n_lint.py l10n_lint_gtk.py\n" if name == "l10n-lint" else "") + f'''
 
 %generate_buildrequires
 %pyproject_buildrequires -R
@@ -109,11 +116,16 @@ Includes upstream command-line entry points.
 %install
 %pyproject_install
 %pyproject_save_files {modules}
+''' + ("install -Dpm 644 man/en/l10n-lint.1 %{buildroot}%{_mandir}/man1/l10n-lint.1\ninstall -Dpm 644 man/en/l10n-lint-gtk.1 %{buildroot}%{_mandir}/man1/l10n-lint-gtk.1\n" if name == "l10n-lint" else "install -Dpm 644 data/man/svlang.1 %{buildroot}%{_mandir}/man1/svlang.1\n") + f'''
+
+%check
+%pyproject_check_import {"-e l10n_lint_gtk" if name == "l10n-lint" else ""}
 
 %files -n python3-{name} -f %{{pyproject_files}}
 %doc README.md
 %license LICENSE
 ''' + "\n".join("%{_bindir}/" + c for c in commands.split()) + '''
+%{_mandir}/man1/*
 
 %changelog
 * Sun Sep 20 2026 Daniel Nylander <daniel@danielnylander.se> - ''' + version + '''-1
@@ -144,16 +156,18 @@ def main():
         if (folder / "debian").exists():
             shutil.rmtree(folder / "debian")
         tarpath = destination / f"{name}-{version}.tar.gz"
-        with tarfile.open(tarpath, "w:gz") as archive:
+        tarpath.write_bytes(data)
+        with tarfile.open(destination / f"python-{name}_{version}.orig.tar.gz", "w:gz") as archive:
             archive.add(folder, arcname=folder.name, filter=lambda entry: None if "/.git/" in entry.name else entry)
-        shutil.copyfile(tarpath, destination / f"python-{name}_{version}.orig.tar.gz")
         debian(folder, name, version, license_name)
-        write(destination / f"python-{name}.spec", rpm_spec(name, version, license_name, modules, commands))
+        write(destination / f"python-{name}.spec", rpm_spec(name, version, license_name, modules, commands, revision))
         records.append({"name": name, "version": version, "revision": revision, "sha256": sha, "url": url})
     subprocess.run([sys.executable, "-m", "build", "--sdist", "--outdir", str(destination), str(ROOT)], check=True)
-    shutil.copyfile(destination / "ordverk-0.2.tar.gz", destination / "ordverk_0.2.orig.tar.gz")
     with tarfile.open(destination / "ordverk-0.2.tar.gz") as archive:
         archive.extractall(destination, filter="data")
+    with tarfile.open(destination / "ordverk_0.2.orig.tar.gz", "w:gz") as archive:
+        archive.add(destination / "ordverk-0.2", arcname="ordverk-0.2",
+                    filter=lambda entry: None if entry.name == "ordverk-0.2/debian" or entry.name.startswith("ordverk-0.2/debian/") else entry)
     write(destination / "sources.json", json.dumps(records, indent=2) + "\n")
 
 
