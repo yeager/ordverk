@@ -368,19 +368,25 @@ class Catalog:
         if self.ext != ".json":
             raise ValueError("Källkatalog behövs här endast för JSON med strängnycklar.")
         reference = json.loads(Path(path).read_text(encoding="utf-8-sig"))
+        original_keys = {u.key: u.source for u in Catalog(self.name, self.raw).units if u.source_is_key}
         count = 0
         for unit in self.units:
-            if not unit.source_is_key:
+            if unit.key not in original_keys:
                 continue
             try:
                 value = lookup(reference, unit.binding)
             except (KeyError, IndexError, TypeError):
+                if not unit.source_is_key:
+                    unit.source, unit.source_is_key, unit.reviewed = original_keys[unit.key], True, False
+                    unit.revision += 1
                 continue
             if isinstance(value, str):
+                if value != unit.source:
+                    unit.reviewed = False
                 unit.source, unit.source_is_key = value, False
                 unit.revision += 1
                 count += 1
-        self.reference = str(path)
+        self.reference = str(Path(path).absolute())
         return count
 
     def swedish_copy(self):

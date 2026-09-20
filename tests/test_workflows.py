@@ -155,3 +155,15 @@ def test_tp_mail_is_exact_attachment_with_filename_subject():
     assert attachment.read_bytes() == raw
     with pytest.raises(ValueError):
         prepare_mail(catalog, "some@host\nBcc: other@host", subject)
+
+
+def test_replacing_json_reference_refreshes_sources_and_review(tmp_path):
+    catalog = Catalog("sv.json", b'{"save":"Spara","cancel":"Avbryt"}')
+    source = tmp_path / "en.json"
+    source.write_text('{"save":"Save","cancel":"Cancel"}')
+    catalog.attach_reference(source)
+    catalog.units[0].reviewed = True
+    source.write_text('{"save":"Save file"}')
+    catalog.attach_reference(source)
+    assert catalog.units[0].source == "Save file" and not catalog.units[0].reviewed
+    assert catalog.units[1].source_is_key and catalog.units[1].targets == ["Avbryt"]
