@@ -4,7 +4,7 @@ Verifierat den 20 september 2026. Första releasen är 0.2.
 
 ## Programmet
 
-- 63 automatiserade tester täcker PO/TS/XLIFF/JSON, XML-koder, pluralformer,
+- 64 automatiserade tester täcker PO/TS/XLIFF/JSON, XML-koder, pluralformer,
   säkra sparningar, externa ändringar, import, diff, granskningsstatus,
   föröversättning, API-kontrakt, resurser, statistik och förloppsmätare.
 - GTK-testet öppnar riktiga fönster under Xvfb och provar import, redigering,

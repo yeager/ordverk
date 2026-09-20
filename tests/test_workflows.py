@@ -167,3 +167,16 @@ def test_replacing_json_reference_refreshes_sources_and_review(tmp_path):
     catalog.attach_reference(source)
     assert catalog.units[0].source == "Save file" and not catalog.units[0].reviewed
     assert catalog.units[1].source_is_key and catalog.units[1].targets == ["Avbryt"]
+
+
+def test_pending_proposal_cannot_apply_to_replaced_catalog_units():
+    store = ResourceStore()
+    store.remember("Save", "Spara")
+    before = 'msgid "Save"\nmsgstr ""\n'
+    catalog = Catalog("sv.po", before.encode())
+    quality = Quality(Settings(use_hunspell=False, use_aspell=False), store)
+    changes, _ = batch_translate([catalog], store, quality)
+    after = 'msgid "Close"\nmsgstr ""\n\n' + before
+    propose_diff(catalog, patch_for(before, after)).apply()
+    assert apply_changes(changes) == (0, 1)
+    assert catalog.units[0].source == "Close" and catalog.units[0].targets == [""]

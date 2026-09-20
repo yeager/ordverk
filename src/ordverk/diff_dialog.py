@@ -102,6 +102,7 @@ class DiffDialog(Adw.Window):
                 self.parent.error("Åtgärda felen eller välj luddig status:\n" + "\n".join(errors), parent=self)
                 return
             ready.apply()
+            self.parent.marked = {key for key in self.parent.marked if key[0] != id(ready.original)}
             self.parent.refresh_files()
             self.parent.filter_units()
             self.parent.update_statistics()
