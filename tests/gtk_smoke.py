@@ -21,7 +21,7 @@ import difflib
 from ordverk.importers import ImportResult
 from ordverk.progress import ProgressState
 from ordverk.settings import Settings
-from gi.repository import GLib
+from gi.repository import GLib, Gtk
 
 
 def pump_until(condition, timeout=12):
@@ -43,6 +43,34 @@ window = Window(app, settings=settings, startup=False)
 errors = []
 window.error = lambda text, **kwargs: errors.append(text)
 window.present()
+
+
+def widget_labels(widget):
+    labels = [widget.get_label().replace("_", "")] if isinstance(widget, Gtk.Label) else []
+    child = widget.get_first_child()
+    while child:
+        labels.extend(widget_labels(child))
+        child = child.get_next_sibling()
+    return labels
+
+
+# Exercise actual GTK templates, including hidden dropdown and About pages.
+assert "(Ingen)" in widget_labels(window.file_picker)
+assert "Sök…" in widget_labels(window.file_picker)
+about = window.about()
+about_labels = widget_labels(about)
+assert "Juridisk information" in about_labels
+assert "Detaljer" in about_labels
+assert not {"Legal", "Details", "Search…", "(None)"}.intersection(about_labels)
+assert about.get_developer_name() == "Daniel Nylander"
+assert about.get_copyright() == "© 2026 Daniel Nylander"
+assert "Språkverktyg och språkresurser" in about_labels
+for tool in ("swedish-tm", "swedish-foss-terminology", "l10n-lint", "svlang", "hunspell-sv", "aspell-sv"):
+    assert any(tool in text for text in about_labels), tool
+about.close()
+assert GLib.dgettext("gtk40", "Copy") == "Kopiera"
+assert GLib.dgettext("gtk40", "Paste") == "Klistra in"
+
 example = Path(__file__).resolve().parents[1] / "examples/sv.po"
 path = Path(temporary.name) / "sv.po"
 path.write_bytes(example.read_bytes())

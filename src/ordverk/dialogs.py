@@ -2,11 +2,7 @@
 from __future__ import annotations
 
 import copy
-import gi
-
-gi.require_version("Gtk", "4.0")
-gi.require_version("Adw", "1")
-from gi.repository import Adw, Gtk
+from .gtk_support import Adw, Gtk
 
 from .settings import data_dir, save_key
 

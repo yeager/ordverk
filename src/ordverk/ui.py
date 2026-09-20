@@ -3,24 +3,13 @@ from __future__ import annotations
 
 import copy
 import json
-import locale
-import os
 import sys
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict
 from pathlib import Path
 
-import gi
-
-os.environ["LANGUAGE"] = "sv"
-try:
-    locale.setlocale(locale.LC_MESSAGES, "sv_SE.UTF-8")
-except locale.Error:
-    pass  # Ordverk's own strings are Swedish even when this system locale is absent.
-gi.require_version("Gtk", "4.0")
-gi.require_version("Adw", "1")
-from gi.repository import Adw, Gdk, Gio, GLib, GObject, Gtk, Pango
+from .gtk_support import Adw, Gdk, Gio, GLib, GObject, Gtk, Pango
 
 from . import __version__
 from .catalog import atomic_write
@@ -1156,11 +1145,27 @@ class Window(Adw.ApplicationWindow):
     def about(self):
         dialog = Adw.AboutWindow(transient_for=self, modal=True, application_name="Ordverk", version=__version__,
                                   application_icon="io.github.yeager.Ordverk",
+                                  developer_name="Daniel Nylander",
+                                  developers=["Daniel Nylander https://github.com/yeager"],
+                                  copyright="© 2026 Daniel Nylander",
+                                  website="https://github.com/yeager/ordverk",
+                                  issue_url="https://github.com/yeager/ordverk/issues",
                                   comments="En svensk översättningsverkstad.\nGTK4 · libadwaita · Python",
                                   license_type=Gtk.License.GPL_3_0)
-        for name in ("swedish-tm", "swedish-foss-terminology", "l10n-lint", "svlang", "hunspell-sv", "aspell-sv"):
-            dialog.add_link(name, "https://github.com/yeager/" + name)
+        dialog.add_credit_section("Språkverktyg och språkresurser", [
+            f"{name} https://github.com/yeager/{name}"
+            for name in ("swedish-tm", "swedish-foss-terminology", "l10n-lint", "svlang", "hunspell-sv", "aspell-sv")
+        ])
+        dialog.add_acknowledgement_section("Bibliotek och plattform", [
+            "GTK https://www.gtk.org/",
+            "libadwaita https://gnome.pages.gitlab.gnome.org/libadwaita/",
+            "PyGObject https://pygobject.gnome.org/",
+            "polib https://pypi.org/project/polib/",
+            "lxml https://lxml.de/",
+            "keyring https://pypi.org/project/keyring/",
+        ])
         dialog.present()
+        return dialog
 
     def on_close(self, *_):
         if any(c.dirty for c in self.catalogs):

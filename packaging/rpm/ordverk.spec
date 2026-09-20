@@ -13,6 +13,7 @@ BuildRequires:  desktop-file-utils
 Requires:       python3dist(pygobject)
 Requires:       gtk4 >= 4.10
 Requires:       libadwaita >= 1.4
+Requires:       glibc-langpack-sv
 Requires:       python3dist(polib) >= 1.2
 Requires:       python3dist(lxml) >= 5
 Requires:       python3dist(l10n-lint) >= 1.21.4

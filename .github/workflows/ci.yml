@@ -24,7 +24,7 @@ jobs:
       - name: Installera GTK och testverktyg
         run: |
           sudo apt-get update
-          sudo apt-get install -y python3-venv python3-gi gir1.2-gtk-4.0 gir1.2-adw-1 hunspell aspell xvfb dbus-daemon desktop-file-utils appstream
+          sudo apt-get install -y python3-venv python3-gi gir1.2-gtk-4.0 gir1.2-adw-1 hunspell aspell xvfb dbus-daemon desktop-file-utils appstream locales language-pack-gnome-sv
           ./scripts/install.sh
           .venv/bin/python -m pip install '.[dev]'
       - name: Kvalitetskontroller och GTK
@@ -33,7 +33,7 @@ jobs:
         run: |
           .venv/bin/python -m pytest -q
           .venv/bin/python -m ruff check src
-          xvfb-run -a dbus-run-session -- .venv/bin/python tests/gtk_smoke.py
+          LC_ALL=C.UTF-8 LANGUAGE=en xvfb-run -a dbus-run-session -- .venv/bin/python tests/gtk_smoke.py
           desktop-file-validate data/io.github.yeager.Ordverk.desktop
           appstreamcli validate --no-net data/io.github.yeager.Ordverk.metainfo.xml
           .venv/bin/python -m build

@@ -14,7 +14,9 @@ Hunspell och Aspell. Både Debian/Ubuntu och Fedora kan köra appen.
 Debian/Ubuntu:
 
 ```sh
-sudo apt install python3 python3-venv python3-gi gir1.2-gtk-4.0 gir1.2-adw-1 git hunspell aspell
+sudo apt install python3 python3-venv python3-gi gir1.2-gtk-4.0 gir1.2-adw-1 git hunspell aspell locales
+# På Ubuntu finns GTK:s svenska översättningar i ett separat språkpaket:
+# sudo apt install language-pack-gnome-sv
 ./scripts/install.sh
 ./run.sh
 ```
@@ -22,7 +24,7 @@ sudo apt install python3 python3-venv python3-gi gir1.2-gtk-4.0 gir1.2-adw-1 git
 Fedora:
 
 ```sh
-sudo dnf install python3 python3-pip python3-gobject gtk4 libadwaita git hunspell aspell
+sudo dnf install python3 python3-pip python3-gobject gtk4 libadwaita git hunspell aspell glibc-langpack-sv
 ./scripts/install.sh
 ./run.sh
 ```
@@ -37,8 +39,10 @@ Det ändrar inga systempaket. Om du vill ha Ordverk i programmenyn:
 
 Startprogrammet använder den genererade Ordverk-ikonen. Behåll projektmappen
 på sin plats efter installation av startprogrammet, eller kör skriptet igen
-om du flyttar den. Installation på ett system utan svensk systemlokal fungerar
-för Ordverks egen text; vissa systemägda dialogtexter kan följa systemets språk.
+om du flyttar den. Ordverk väljer svenska även för GTK:s och libadwaitas
+standardtexter, oavsett datorns språk. På Debian utan genererad svensk systemlokal
+byggs språkdefinitionen från installerade systemdata och sparas i `~/.ordverk/locale`.
+Systemets språkinställningar ändras inte.
 
 ## Import och arbetssätt
 

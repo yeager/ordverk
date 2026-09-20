@@ -4,12 +4,17 @@ Verifierat den 20 september 2026. Första releasen är 0.2.
 
 ## Programmet
 
-- 64 automatiserade tester täcker PO/TS/XLIFF/JSON, XML-koder, pluralformer,
+- 68 automatiserade tester täcker PO/TS/XLIFF/JSON, XML-koder, pluralformer,
   säkra sparningar, externa ändringar, import, diff, granskningsstatus,
   föröversättning, API-kontrakt, resurser, statistik och förloppsmätare.
 - GTK-testet öppnar riktiga fönster under Xvfb och provar import, redigering,
   sparning, granskning, statistik, förlopp, diffredigering, markerade strängar,
   inställningar, fyra tjänsteprofiler och TP:s e-postförval.
+- Språktester startar med C- och engelska miljöinställningar och kontrollerar
+  svenska GTK-texter, bland annat Sök, Kopiera, Detaljer och Juridisk information.
+  Om-dialogens tillskrivning till Daniel Nylander och de sex språkverktygen ingår.
+  En separat kontroll bygger och återanvänder svensk språkinställning i en privat
+  cache när systemets genererade språkinställningar saknas.
 - Ruff och desktop-file-validate passerar. AppStream-validering passerar.
 - Installerad source-version och `.desktop`-startprogram har verifierats lokalt.
   Källkod, PNG-ikon, `.desktop`, AppStream och manualsida ingår i paketen.

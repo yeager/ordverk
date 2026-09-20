@@ -15,8 +15,8 @@ Package: ordverk
 Architecture: all
 Depends: ${python3:Depends}, ${misc:Depends}, python3 (>= 3.11), python3-gi,
  gir1.2-gtk-4.0 (>= 4.10), gir1.2-adw-1 (>= 1.4), python3-polib,
- python3-lxml, python3-l10n-lint (>= 1.21.4), python3-svlang (>= 0.2.2)
-Recommends: hunspell, aspell, python3-keyring, xdg-utils
+ python3-lxml, python3-l10n-lint (>= 1.21.4), python3-svlang (>= 0.2.2), locales | locales-all
+Recommends: hunspell, aspell, python3-keyring, xdg-utils, language-pack-gnome-sv
 Description: Swedish translation workbench for Linux
  Native GTK application for translating and reviewing PO, Qt TS, XLIFF and
  JSON files in Swedish, with translation memory, terminology, spellchecking,
