@@ -1,6 +1,23 @@
 """Seven-second delayed progress, including operations without a known total."""
 from dataclasses import dataclass, field
 from time import monotonic
+from threading import Lock
+
+
+class LatestProgress:
+    """Bound worker updates to one pending value instead of flooding GTK's queue."""
+    def __init__(self):
+        self._lock = Lock()
+        self._value = None
+
+    def put(self, text, current=None, total=None):
+        with self._lock:
+            self._value = (text, current, total)
+
+    def take(self):
+        with self._lock:
+            value, self._value = self._value, None
+            return value
 
 
 @dataclass

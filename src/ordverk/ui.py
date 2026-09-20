@@ -12,15 +12,22 @@ from pathlib import Path
 from .gtk_support import Adw, Gdk, Gio, GLib, GObject, Gtk, Pango
 
 from . import __version__
+from .ai_context import catalog_context
+from .ai_providers import is_configured, provider_for
+from .selection import FILTERS, matches
 from .catalog import atomic_write
 from .dialogs import ImportGuide, Preferences, PretranslateDialog
 from .importers import import_sources
 from .llm import Translator
 from .quality import Quality
-from .progress import ProgressState
+from .progress import LatestProgress, ProgressState
 from .resources import ResourceStore
 from .remote_dialogs import Connections, MailDialog
 from .diff_dialog import DiffDialog
+from .export_dialog import ExportDialog
+from .header_dialog import HeaderDialog
+from .po_header import stamp_translator
+from .pot_dialog import choose_template
 from .diffs import parse_diff, propose_diff
 from .settings import Settings
 from .statistics import statistics
@@ -61,9 +68,10 @@ def scroll(child, **kwargs):
 class UnitRow(GObject.Object):
     changed = GObject.Signal()
 
-    def __init__(self, unit):
+    def __init__(self, unit, number=1):
         super().__init__()
         self.unit = unit
+        self.number = number
 
 
 class Window(Adw.ApplicationWindow):
@@ -82,14 +90,16 @@ class Window(Adw.ApplicationWindow):
         self.busy, self.updating = False, False
         self.job_meter = self.resource_meter = self.check_meter = None
         self.progress_timer = None
+        self.pending_progress = LatestProgress()
         self.diagnostics = []
         self.session_statistics = {"memory": 0, "ai": 0}
         self.marked = set()
         self.suggestion_generation = 0
         self.suggestion_meter = None
+        self.suggestion_future = None
         self.report_ready = False
         self.connection_tokens = {}
-        self.pending_save = None
+        self.close_dialog = None
         self.refresh_services()
         self._build()
         icon_folder = Path(__file__).resolve().parents[2] / "data"
@@ -106,7 +116,8 @@ class Window(Adw.ApplicationWindow):
         self.quality = Quality(self.settings, self.store)
         self.translator = Translator(self.settings, self.store, self.quality, self.session_key)
         if hasattr(self, "api_status"):
-            self.api_status.set_label(f"AI · {self.settings.model}" if self.settings.model else "AI inte konfigurerad")
+            service = self.settings.model or provider_for(self.settings).name
+            self.api_status.set_label(f"AI · {service}" if is_configured(self.settings) else "AI inte konfigurerad")
             self.schedule_check()
 
     def _build(self):
@@ -119,6 +130,7 @@ class Window(Adw.ApplicationWindow):
         header.set_title_widget(self.title_widget)
         menu = Gio.Menu()
         for text, action in [("Filer…", "win.open"), ("Mapp med undermappar…", "win.folder"),
+                             ("Uppdatera PO från POT…", "win.pot"),
                              ("Diff / patch…", "win.diff"),
                              ("URL eller GitHub-förråd…", "win.url"), ("Översättningsminne (PO)…", "win.memory"),
                              ("Terminologi (TBX / CSV)…", "win.terms"), ("GitHub / Weblate / Transifex / Crowdin…", "win.connections")]:
@@ -128,6 +140,7 @@ class Window(Adw.ApplicationWindow):
         self.save_button = button("Spara", self.save, "document-save-symbolic")
         self.save_button.set_sensitive(False)
         header.pack_start(self.save_button)
+        header.pack_start(button("Exportera…", self.export_files))
         header.pack_start(button("Föröversätt…", self.pretranslate))
         header.pack_end(button("Inställningar", lambda: Preferences(self).present(), "emblem-system-symbolic"))
         more = Gio.Menu()
@@ -138,6 +151,8 @@ class Window(Adw.ApplicationWindow):
             more.append(text, action)
         more.append("Importera eller exportera till tjänst…", "win.connections")
         more.append("Skicka via e-post / TP…", "win.mail")
+        more.append("Avsluta", "win.quit")
+        more.append("Redigera PO-huvud…", "win.po-header")
         header.pack_end(Gtk.MenuButton(icon_name="open-menu-symbolic", menu_model=more))
         root.append(header)
 
@@ -147,7 +162,8 @@ class Window(Adw.ApplicationWindow):
         self.file_picker.set_tooltip_text("Importerade kataloger")
         self.file_picker.connect("notify::selected", self.select_catalog)
         toolbar.append(self.file_picker)
-        self.api_status = label("AI inte konfigurerad", "dim-label")
+        service = self.settings.model or provider_for(self.settings).name
+        self.api_status = label(f"AI · {service}" if is_configured(self.settings) else "AI inte konfigurerad", "dim-label")
         toolbar.append(self.api_status)
         toolbar.append(button("Statistik", self.show_statistics, "view-list-symbolic"))
         toolbar.append(button("Granska fil", lambda: self.review_catalogs([self.catalog]) if self.catalog else None,
@@ -186,7 +202,8 @@ class Window(Adw.ApplicationWindow):
         self.search = Gtk.SearchEntry(placeholder_text="Sök källtext, svenska eller kontext")
         self.search.connect("search-changed", lambda _: self.filter_units())
         left.append(self.search)
-        self.filter = Gtk.DropDown.new_from_strings(["Alla strängar", "Oöversatta", "Att granska", "Granskade"])
+        self.filter = Gtk.DropDown.new_from_strings([title for _, title in FILTERS])
+        self.filter.set_tooltip_text("Ändringar sedan import jämförs med filen när den öppnades, även efter sparning.")
         self.filter.connect("notify::selected", lambda *_: self.filter_units())
         left.append(self.filter)
         marked_controls = Gtk.Box(spacing=6)
@@ -242,6 +259,7 @@ class Window(Adw.ApplicationWindow):
         self.review_button = button("Markera granskad", self.mark_reviewed, "object-select-symbolic", "suggested-action")
         controls.append(self.review_button)
         editor.append(controls)
+        editor.append(button("Visa kontext till AI", self.preview_ai_context))
         self.notes = label("", "dim-label", wrap=True)
         editor.append(self.notes)
         self.issue_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
@@ -325,6 +343,10 @@ class Window(Adw.ApplicationWindow):
             "next": lambda: self.move(1), "previous": lambda: self.move(-1),
             "approve": self.mark_reviewed,
             "pretranslate": self.pretranslate,
+            "export": self.export_files,
+            "po-header": self.edit_po_header,
+            "pot": lambda: choose_template(self),
+            "quit": self.close,
             "connections": lambda: Connections(self).present(),
             "diff": self.import_diff,
             "mail": lambda: MailDialog(self).present() if self.catalog else self.toast("Importera en fil först."),
@@ -334,7 +356,8 @@ class Window(Adw.ApplicationWindow):
             action.connect("activate", lambda _a, _p, callback=callback: callback())
             self.add_action(action)
         for action, keys in {"open": ["<Control>o"], "save": ["<Control>s"], "save-as": ["<Control><Shift>s"],
-                             "next": ["<Alt>Down"], "previous": ["<Alt>Up"], "approve": ["<Control>Return"]}.items():
+                             "next": ["<Alt>Down"], "previous": ["<Alt>Up"], "approve": ["<Control>Return"],
+                             "quit": ["<Control>q"]}.items():
             self.get_application().set_accels_for_action("win." + action, keys)
 
     def toast(self, text):
@@ -360,6 +383,7 @@ class Window(Adw.ApplicationWindow):
             self.toast("Låt det pågående arbetet bli klart eller avbryt det först.")
             return
         self.busy = True
+        self.pending_progress.take()
         self.job_meter = ProgressState()
         self.start_progress_timer()
         self.job_cancel = threading.Event()
@@ -370,6 +394,7 @@ class Window(Adw.ApplicationWindow):
 
         def complete(f):
             def finish():
+                self.flush_progress()
                 self.busy = False
                 self.job_meter = None
                 self.job_bar.set_visible(False)
@@ -387,17 +412,22 @@ class Window(Adw.ApplicationWindow):
         return True
 
     def progress_message(self, text, current=None, total=None):
-        def update():
+        self.pending_progress.put(text, current, total)
+
+    def flush_progress(self):
+        update = self.pending_progress.take()
+        if update:
+            text, current, total = update
             self.status.set_label(text)
             if self.job_meter:
                 self.job_meter.update(current, total)
-        self.dispatch(update)
 
     def start_progress_timer(self):
         if self.progress_timer is None:
             self.progress_timer = GLib.timeout_add(120, self.tick_progress)
 
     def tick_progress(self):
+        self.flush_progress()
         for meter, bar in ((self.job_meter, self.job_bar), (self.resource_meter, self.resource_bar),
                            (self.check_meter, self.check_bar), (self.suggestion_meter, self.suggestion_bar)):
             visible = meter is not None and meter.visible()
@@ -630,7 +660,7 @@ class Window(Adw.ApplicationWindow):
         source = box.get_first_child()
         target = source.get_next_sibling()
         state = target.get_next_sibling()
-        source.set_label(unit.source.replace("\n", " ↵ "))
+        source.set_label(f"{item.get_item().number}. " + unit.source.replace("\n", " ↵ "))
         target.set_label((unit.targets[0] or "Skriv en svensk översättning…").replace("\n", " ↵ "))
         state.set_label(unit.status + (" · " + unit.context[:40] if unit.context else ""))
 
@@ -643,6 +673,8 @@ class Window(Adw.ApplicationWindow):
         else:
             self.marked.discard(identity)
         self.update_list_count()
+        if FILTERS[self.filter.get_selected()][0] == "marked":
+            self.dispatch(self.filter_units)
 
     def update_list_count(self):
         if self.catalog:
@@ -660,17 +692,21 @@ class Window(Adw.ApplicationWindow):
             row.emit("changed")
         self.update_list_count()
 
+        if FILTERS[self.filter.get_selected()][0] == "marked":
+            self.filter_units()
+
     def filter_units(self):
         if not self.catalog:
             return
         previous = self.unit
         query = self.search.get_text().casefold()
-        status_filter = self.filter.get_selected()
-        statuses = {1: "Oöversatt", 2: "Att granska", 3: "Granskad"}
-        units = [u for u in self.catalog.units if (not status_filter or u.status == statuses[status_filter])
+        kind = FILTERS[self.filter.get_selected()][0]
+        rows = [(number, u) for number, u in enumerate(self.catalog.units, 1)
+                if matches(u, kind, marked=kind == "marked" and (id(self.catalog), u.key) in self.marked)
                  and (not query or query in "\n".join([u.source, *u.targets, u.context, u.notes]).casefold())]
+        units = [unit for _, unit in rows]
         self.loading = True
-        self.unit_store.splice(0, self.unit_store.get_n_items(), [UnitRow(u) for u in units])
+        self.unit_store.splice(0, self.unit_store.get_n_items(), [UnitRow(unit, number) for number, unit in rows])
         index = next((i for i, u in enumerate(units) if u is previous or (previous and u.key == previous.key)), 0)
         if units:
             self.selection.set_selected(index)
@@ -720,6 +756,7 @@ class Window(Adw.ApplicationWindow):
         if self.loading or not self.unit:
             return
         self.unit.edit(self.variant, self.target_buffer.get_text(*self.target_buffer.get_bounds(), True))
+        clear(self.proposal_box)
         selected = self.selection.get_selected_item()
         if selected:
             selected.emit("changed")
@@ -730,7 +767,10 @@ class Window(Adw.ApplicationWindow):
         if self.unit:
             self.unit_status.set_label(self.unit.status)
             self.length_label.set_label(f"{len(self.unit.targets[self.variant])} tecken")
-            self.set_title(("● " if self.catalog.dirty else "") + self.catalog.name + " — Ordverk")
+        if self.catalog:
+            # An edited current unit proves dirtiness without rescanning a large file on every keypress.
+            dirty = (self.unit is not None and self.unit.changed) or self.catalog.dirty
+            self.set_title(("● " if dirty else "") + self.catalog.name + " — Ordverk")
 
     def copy_source(self):
         if self.unit and not self.unit.source_is_key:
@@ -801,6 +841,8 @@ class Window(Adw.ApplicationWindow):
         clear(self.memory_box)
         clear(self.term_box)
         self.suggestion_generation += 1
+        if self.suggestion_future:
+            self.suggestion_future.cancel()
         generation = self.suggestion_generation
         self.suggestion_meter = None
         if not self.unit:
@@ -813,6 +855,7 @@ class Window(Adw.ApplicationWindow):
         self.suggestion_meter = ProgressState()
         self.start_progress_timer()
         future = self.executor.submit(lambda: (self.store.memory(source, context, 8), self.store.terminology(source, 8)))
+        self.suggestion_future = future
         def finish(f):
             def display():
                 if generation != self.suggestion_generation:
@@ -857,12 +900,14 @@ class Window(Adw.ApplicationWindow):
     def request_ai(self):
         if not self.unit:
             return
-        if not self.settings.base_url or not self.settings.model:
+        if not is_configured(self.settings):
             Preferences(self).present()
-            self.toast("Ange API-adress och modell för att få AI-förslag.")
+            self.toast("Välj och konfigurera en översättningstjänst för att få förslag.")
             return
         unit, variant, revision = self.unit, self.variant, self.unit.revision
         snapshot = copy.deepcopy(unit)
+        translator = self.translator
+        context = catalog_context(self.catalog, unit, self.settings.ai_context_neighbors)
 
         def done(proposal):
             if self.unit is not unit or unit.revision != revision or self.variant != variant:
@@ -872,14 +917,30 @@ class Window(Adw.ApplicationWindow):
             self.proposal_box.append(label(f"AI-förslag · {proposal.model}", "heading", wrap=True))
             self.proposal_box.append(label(proposal.translation, wrap=True))
             self.proposal_box.append(label(proposal.explanation, "dim-label", wrap=True))
-            use = button("Använd AI-förslag", lambda: self.use_suggestion(proposal.translation, "ai"), css="suggested-action")
+            def apply():
+                if self.unit is not unit or unit.revision != revision or self.variant != variant:
+                    self.toast("Strängen har ändrats. Begär ett nytt förslag.")
+                    return
+                self.use_suggestion(proposal.translation, "ai")
+            use = button("Använd AI-förslag", apply, css="suggested-action")
             errors = [i for i in proposal.issues if i.severity == "error"]
             use.set_sensitive(not errors)
             self.proposal_box.append(use)
             for issue in errors:
                 self.proposal_box.append(label(issue.message, "error", wrap=True))
             self.status.set_label("AI-förslaget är klart för granskning")
-        self.job("Ber om ett AI-förslag…", lambda cancel: self.translator.suggest(snapshot, variant, cancel), done)
+        self.job("Ber om ett AI-förslag…", lambda cancel: translator.suggest(snapshot, variant, cancel, context), done)
+
+    def preview_ai_context(self, settings=None, parent=None):
+        if not self.unit or not self.catalog:
+            self.toast("Välj en sträng för att se översättningskontexten.")
+            return
+        settings = settings or self.settings
+        unit, variant = copy.deepcopy(self.unit), self.variant
+        context = catalog_context(self.catalog, self.unit, settings.ai_context_neighbors)
+        translator = Translator(settings, self.store, self.quality)
+        self.job("Samlar översättningskontext…", lambda _: translator.preview(unit, variant, context),
+                 lambda text: self.show_report("Kontext till översättningen", [text], parent=parent))
 
     def mark_reviewed(self):
         if not self.unit:
@@ -919,8 +980,8 @@ class Window(Adw.ApplicationWindow):
         elif purpose == "review":
             self.review_catalogs(catalogs)
         else:
-            if use_ai and (not self.settings.base_url or not self.settings.model):
-                self.error("Konfigurera API-adress och modell innan automatisk AI-översättning startas.")
+            if use_ai and not is_configured(self.settings):
+                self.error("Konfigurera en översättningstjänst innan automatisk AI-översättning startas.")
                 Preferences(self).present()
                 return
 
@@ -1003,8 +1064,8 @@ class Window(Adw.ApplicationWindow):
             self.status.set_label(f"Granskningen är klar · {len(results)} avvikelser")
         self.job("Granskar kataloger…", run, done)
 
-    def show_report(self, title, messages):
-        window = Adw.Window(transient_for=self, modal=False, title=title, default_width=720, default_height=480)
+    def show_report(self, title, messages, parent=None):
+        window = Adw.Window(transient_for=parent or self, modal=False, title=title, default_width=720, default_height=480)
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         box.append(Adw.HeaderBar())
         text = Gtk.TextView(editable=False, cursor_visible=False, wrap_mode=Gtk.WrapMode.WORD_CHAR,
@@ -1014,8 +1075,8 @@ class Window(Adw.ApplicationWindow):
         window.set_content(box)
         window.present()
 
-    def save(self, save_as=False):
-        catalog = self.catalog
+    def save(self, save_as=False, *, catalog=None, on_saved=None):
+        catalog = catalog or self.catalog
         if not catalog or self.busy:
             if self.busy:
                 self.toast("Avsluta pågående arbete innan du sparar.")
@@ -1023,11 +1084,15 @@ class Window(Adw.ApplicationWindow):
 
         def write(path):
             def finish(overwrite=False):
+                if self.busy:
+                    self.toast("Låt det pågående arbetet bli klart innan du sparar.")
+                    return
                 self.stack.set_sensitive(False)
                 def operation(cancel):
                     if cancel.is_set():
                         return None
                     snapshot = copy.deepcopy(catalog)
+                    stamp_translator(snapshot, self.settings)
                     snapshot.save(path, overwrite=overwrite)
                     return snapshot
                 def saved(result):
@@ -1041,6 +1106,8 @@ class Window(Adw.ApplicationWindow):
                     self.toast("Filen har sparats. Tidigare innehåll finns som säkerhetskopia.")
                     self.status.set_label("Sparad · " + str(path))
                     self.update_statistics()
+                    if on_saved:
+                        on_saved()
                 self.job("Sparar filen…", operation, saved)
             if Path(path).exists() and Path(path).absolute() != catalog.path:
                 dialog = Adw.MessageDialog(transient_for=self, heading="Ersätta den befintliga filen?", body=str(path))
@@ -1094,6 +1161,22 @@ class Window(Adw.ApplicationWindow):
         self.file_dialog("Exportera senaste granskningsrapport", lambda path: self.job("Exporterar rapport…", lambda _: atomic_write(
             Path(path), json.dumps(self.diagnostics, ensure_ascii=False, indent=2).encode(), 0o644), lambda _: self.toast("Rapporten har exporterats.")),
             save_name="ordverk-granskning.json")
+
+    def export_files(self):
+        if not self.catalog:
+            self.toast("Importera en fil först.")
+            return
+        dialog = ExportDialog(self)
+        dialog.present()
+        return dialog
+
+    def edit_po_header(self):
+        if not self.catalog or self.catalog.ext not in {".po", ".pot"}:
+            self.toast("Välj en PO- eller POT-fil först.")
+            return
+        dialog = HeaderDialog(self)
+        dialog.present()
+        return dialog
 
     def export_memory(self):
         self.file_dialog("Exportera eget granskat minne", lambda path: self.job("Exporterar minne…", lambda _: self.store.export_memory(path),
@@ -1163,24 +1246,59 @@ class Window(Adw.ApplicationWindow):
             "polib https://pypi.org/project/polib/",
             "lxml https://lxml.de/",
             "keyring https://pypi.org/project/keyring/",
+            "GNU Gettext https://www.gnu.org/software/gettext/",
         ])
         dialog.present()
         return dialog
 
     def on_close(self, *_):
-        if any(c.dirty for c in self.catalogs):
-            dialog = Adw.MessageDialog(transient_for=self, heading="Du har osparade ändringar",
-                                       body="Spara de ändrade katalogerna innan du stänger om du vill behålla arbetet.")
+        if self.close_dialog:
+            self.close_dialog.present()
+            return True
+        dirty = [catalog for catalog in self.catalogs if catalog.dirty]
+        if dirty or self.busy:
+            names = "\n".join(catalog.name for catalog in dirty[:8])
+            if len(dirty) > 8:
+                names += f"\n… och {len(dirty) - 8} till."
+            body = f"{len(dirty)} filer har osparade ändringar:\n{names}" if dirty else ""
+            if self.busy:
+                body += "\n\nLåt det pågående arbetet bli klart eller avbryt det med Avbryt innan du avslutar."
+            dialog = Adw.MessageDialog(transient_for=self, modal=True,
+                                       heading="Du har osparade ändringar" if dirty else "Arbete pågår", body=body.strip())
+            self.close_dialog = dialog
             dialog.add_response("cancel", "Fortsätt arbeta")
-            dialog.add_response("discard", "Stäng utan att spara")
-            dialog.set_response_appearance("discard", Adw.ResponseAppearance.DESTRUCTIVE)
-            dialog.connect("response", lambda _d, response: self.shutdown() if response == "discard" else None)
+            dialog.set_default_response("cancel")
+            dialog.set_close_response("cancel")
+            if not self.busy:
+                dialog.add_response("discard", "Stäng utan att spara")
+                dialog.add_response("save", "Spara alla och avsluta")
+                dialog.set_response_appearance("discard", Adw.ResponseAppearance.DESTRUCTIVE)
+                dialog.set_response_appearance("save", Adw.ResponseAppearance.SUGGESTED)
+            def respond(_dialog, response):
+                self.close_dialog = None
+                if response == "save":
+                    self.save_before_close()
+                elif response == "discard" and not self.busy:
+                    self.shutdown()
+            dialog.connect("response", respond)
             dialog.present()
             return True
         self.shutdown()
         return True
 
+    def save_before_close(self):
+        if self.busy or self.closed:
+            return
+        dirty = next((catalog for catalog in self.catalogs if catalog.dirty), None)
+        if dirty is None:
+            self.shutdown()
+            return
+        self.file_picker.set_selected(self.catalogs.index(dirty))
+        self.save(catalog=dirty, on_saved=self.save_before_close)
+
     def shutdown(self):
+        if self.closed:
+            return
         self.closed = True
         self.job_cancel.set()
         self.resource_cancel.set()

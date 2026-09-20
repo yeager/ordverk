@@ -1,6 +1,7 @@
 import copy
 import difflib
 import json
+import threading
 from email import policy
 from email.parser import BytesParser
 from pathlib import Path
@@ -180,3 +181,14 @@ def test_pending_proposal_cannot_apply_to_replaced_catalog_units():
     propose_diff(catalog, patch_for(before, after)).apply()
     assert apply_changes(changes) == (0, 1)
     assert catalog.units[0].source == "Close" and catalog.units[0].targets == [""]
+
+
+def test_cancelled_batch_does_not_copy_or_translate_any_units():
+    class NoWork:
+        def __deepcopy__(self, _memo):
+            raise AssertionError("Cancelled work must not start snapshotting")
+    catalog = Catalog("sv.po", b'msgid "Save"\nmsgstr ""\n')
+    catalog.units[0].binding = NoWork()
+    cancel = threading.Event()
+    cancel.set()
+    assert batch_translate([catalog], None, None, cancel=cancel)[0] == []

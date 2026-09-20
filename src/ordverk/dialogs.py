@@ -5,6 +5,10 @@ import copy
 from .gtk_support import Adw, Gtk
 
 from .settings import data_dir, save_key
+from .ai_providers import PROVIDERS, is_configured, provider_for
+from .selection import FILTERS, matches
+from .po_header import translator_identity
+from .importers import validate_url
 
 
 def entry(group, title, text="", password=False):
@@ -38,12 +42,33 @@ class Preferences(Adw.PreferencesWindow):
         self.updates = switch(group, "Uppdatera språkresurser automatiskt", "Kontrollera vid varje start. Cachade data fungerar utan nät.", self.settings.auto_update_resources)
         self.project = entry(group, "Projektets sammanhang", self.settings.project_context)
         self.domain = entry(group, "Domän / ekosystem", self.settings.domain)
+        identity = Adw.PreferencesGroup(title="Översättare", description=f"Sparas i {data_dir() / 'settings.json'}")
+        simple.add(identity)
+        self.translator_name = entry(identity, "Översättarens namn", self.settings.translator_name)
+        self.translator_email = entry(identity, "E-postadress", self.settings.translator_email)
+        self.update_po_header = switch(identity, "Uppdatera PO-huvudet vid sparning",
+                                       "Använd namn, e-postadress och aktuellt revisionsdatum när en PO-fil sparas.",
+                                       self.settings.update_po_header)
         ai = Adw.PreferencesGroup(title="AI-anslutning", description="Valfritt. Källtext, aktuell översättning, kommentarer och relevanta språkresurser skickas till tjänsten när du begär AI-hjälp.")
         simple.add(ai)
+        self.provider = Adw.ComboRow(title="Tjänst", model=Gtk.StringList.new([p.name for p in PROVIDERS]))
+        self.provider.set_selected(PROVIDERS.index(provider_for(self.settings)))
+        ai.add(self.provider)
         self.endpoint = entry(ai, "API-basadress · exempel: http://localhost:11434/v1", self.settings.base_url)
         self.model = entry(ai, "Modellnamn", self.settings.model)
+        self.provider_help = Adw.ActionRow(title="Du kan anpassa API-adress och modell.")
+        ai.add(self.provider_help)
         self.key = entry(ai, "API-nyckel för den här sessionen", "", password=True)
         self.remember_key = switch(ai, "Spara nyckeln i systemnyckelringen", "Annars används den bara i denna session eller från miljövariabeln.", False)
+        context = Adw.PreferencesGroup(title="Kontext till översättningen")
+        simple.add(context)
+        self.auto_context = switch(context, "Ta med automatisk filkontext",
+                                   "Filnamn, källkodshänvisningar och närliggande strängar ger sammanhang.",
+                                   self.settings.ai_auto_context)
+        self.instructions = entry(context, "Egna översättningsanvisningar", self.settings.ai_instructions)
+        preview = Gtk.Button(label="Visa kontext för vald sträng", halign=Gtk.Align.START)
+        preview.connect("clicked", lambda _: self.preview_context())
+        context.add(preview)
         simple.add(self.save_group())
 
         resources = Adw.PreferencesGroup(title="Språkresurser", description=f"Cache: {data_dir()}\nFörsta hämtningen av alla resurser är ungefär 170 MB. CSV bevarar även de två termer som TBX inte kan representera.")
@@ -73,7 +98,31 @@ class Preferences(Adw.PreferencesWindow):
         self.auto_ai = switch(automation, "Tillåt AI i automatiskt arbete", "API-anrop kan medföra kostnader. Exakta, entydiga minnesträffar används först.", self.settings.automatic_use_ai)
         self.limit = entry(automation, "Högst antal strängar per automatisk körning", str(self.settings.automatic_limit))
         self.env = entry(automation, "Miljövariabel för API-nyckeln", self.settings.api_key_env)
+        self.neighbors = entry(automation, "Närliggande strängar på varje sida · 0–10", str(self.settings.ai_context_neighbors))
         advanced.add(self.save_group())
+        self.provider.connect("notify::selected", self.select_provider)
+        self.update_provider_help()
+
+    def select_provider(self, *_):
+        provider = PROVIDERS[self.provider.get_selected()]
+        self.endpoint.set_text(provider.base_url)
+        self.model.set_text(provider.model)
+        self.env.set_text(provider.key_env)
+        self.key.set_text("")
+        self.remember_key.set_active(False)
+        self.update_provider_help()
+
+    def update_provider_help(self):
+        deepl = PROVIDERS[self.provider.get_selected()].protocol == "deepl"
+        self.model.set_sensitive(not deepl)
+        self.provider_help.set_title("DeepL väljer modell och identifierar källspråket automatiskt." if deepl
+                                     else "Du kan anpassa API-adress och modell.")
+
+    def preview_context(self):
+        try:
+            self.parent.preview_ai_context(self.collect(), parent=self)
+        except ValueError as exc:
+            self.parent.error(str(exc), parent=self)
 
     def save_group(self):
         group = Adw.PreferencesGroup()
@@ -83,15 +132,33 @@ class Preferences(Adw.PreferencesWindow):
         return group
 
     def collect(self):
-        limit = int(self.limit.get_text())
+        try:
+            limit = int(self.limit.get_text())
+            neighbors = int(self.neighbors.get_text())
+        except ValueError as exc:
+            raise ValueError("Ange heltal för körningsgränsen och antalet närliggande strängar.") from exc
         if not 1 <= limit <= 10000:
             raise ValueError("Välj en gräns mellan 1 och 10 000 strängar.")
+        if not 0 <= neighbors <= 10:
+            raise ValueError("Välj mellan 0 och 10 närliggande strängar per sida.")
         settings = self.settings
+        translator_identity(self.translator_name.get_text(), self.translator_email.get_text())
+        settings.translator_name = self.translator_name.get_text().strip()
+        settings.translator_email = self.translator_email.get_text().strip()
+        settings.update_po_header = self.update_po_header.get_active()
         settings.show_import_guide = self.guide.get_active()
         settings.auto_update_resources = self.updates.get_active()
         settings.project_context = self.project.get_text()
         settings.domain = self.domain.get_text()
         settings.base_url = self.endpoint.get_text().strip()
+        if settings.base_url:
+            parsed = validate_url(settings.base_url, local_http=True)
+            if parsed.query or parsed.fragment:
+                raise ValueError("API-adressen får inte innehålla frågeparametrar eller fragment.")
+        settings.ai_provider = PROVIDERS[self.provider.get_selected()].id
+        settings.ai_auto_context = self.auto_context.get_active()
+        settings.ai_context_neighbors = neighbors
+        settings.ai_instructions = self.instructions.get_text()
         settings.model = self.model.get_text().strip()
         settings.api_key_env = self.env.get_text().strip()
         settings.hunspell_dictionary = self.hunpath.get_text().strip()
@@ -115,7 +182,7 @@ class Preferences(Adw.PreferencesWindow):
                 save_key(settings.base_url, key)
             settings.save()
         def done(_):
-            if self.parent.settings.base_url != settings.base_url:
+            if (self.parent.settings.base_url, self.parent.settings.ai_provider) != (settings.base_url, settings.ai_provider):
                 self.parent.session_key = ""
             self.parent.settings = settings
             if key:
@@ -202,10 +269,18 @@ class PretranslateDialog(Adw.PreferencesWindow):
         group = Adw.PreferencesGroup(title=self.catalog.name, description="Förslagen visas för granskning innan du tillämpar dem. Alla plural- och längdvarianter ingår.")
         page.add(group)
         self.marked = {(id(self.catalog), u.key) for u in self.catalog.units if (id(self.catalog), u.key) in parent.marked}
-        self.scope = Adw.ComboRow(title="Omfattning", model=Gtk.StringList.new([
-            "Hela filen", "Aktuell sträng", f"Markerade strängar ({len(self.marked)})"]))
+        self.scopes = [("all", "Alla strängar"), ("current", "Aktuell sträng"),
+                       ("marked", f"Markerade strängar ({len(self.marked)})"),
+                       ("visible", "Visade strängar (aktuellt filter)")]
+        self.scopes.extend((key, title) for key, title in FILTERS if key not in {"all", "marked"})
+        self.visible = {(id(self.catalog), row.unit.key) for row in parent.unit_store}
+        self.scope = Adw.ComboRow(title="Omfattning", model=Gtk.StringList.new([title for _, title in self.scopes]))
         self.scope.set_selected(2 if self.marked else 0)
         group.add(self.scope)
+        self.scope_count = Adw.ActionRow(title="Urval")
+        group.add(self.scope_count)
+        self.scope.connect("notify::selected", lambda *_: self.update_scope_count())
+        self.update_scope_count()
         self.method = Adw.ComboRow(title="Översätt med", model=Gtk.StringList.new([
             "Översättningsminne och ordlistor", "AI", "Språkresurser först, sedan AI"]))
         group.add(self.method)
@@ -217,15 +292,31 @@ class PretranslateDialog(Adw.PreferencesWindow):
         page.add(Adw.PreferencesGroup())
         group.add(start)
 
+    def selected_keys(self):
+        scope = self.scopes[self.scope.get_selected()][0]
+        if scope == "all":
+            return None
+        if scope == "current":
+            return {(id(self.catalog), self.unit.key)} if self.unit else set()
+        if scope == "marked":
+            return self.marked
+        if scope == "visible":
+            return self.visible
+        return {(id(self.catalog), unit.key) for unit in self.catalog.units if matches(unit, scope)}
+
+    def update_scope_count(self):
+        selected = self.selected_keys()
+        count = len(self.catalog.units) if selected is None else len(selected)
+        self.scope_count.set_subtitle(f"{count} av {len(self.catalog.units)} strängar. Alla former ingår.")
+
     def start(self):
-        scope = self.scope.get_selected()
-        selected = None if scope == 0 else ({(id(self.catalog), self.unit.key)} if scope == 1 and self.unit else self.marked)
+        selected = self.selected_keys()
         if selected is not None and not selected:
             self.parent.error("Välj minst en sträng först.", parent=self)
             return
         method = ("resources", "ai", "combined")[self.method.get_selected()]
-        if method != "resources" and (not self.parent.settings.base_url or not self.parent.settings.model):
-            self.parent.error("Ange API-adress och modell i inställningarna först.", parent=self)
+        if method != "resources" and not is_configured(self.parent.settings):
+            self.parent.error("Välj och konfigurera en översättningstjänst i inställningarna först.", parent=self)
             return
         if self.parent.run_pretranslation(self.catalog, selected, method, self.overwrite.get_active()):
             self.close()

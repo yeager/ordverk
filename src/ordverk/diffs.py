@@ -121,18 +121,27 @@ def propose_diff(catalog, patch):
         after = after.removeprefix(b"\xef\xbb\xbf")
     candidate = Catalog(catalog.name, after, path=catalog.path, origin=catalog.origin, reference=catalog.reference)
     candidate.fingerprint = catalog.fingerprint
+    candidate.import_raw = catalog.import_raw
+    candidate.import_name = catalog.import_name
+    candidate.import_encoding = catalog.import_encoding
     candidate._pending_structure = before != after or catalog.dirty
     # Source/context identity avoids positional PO keys confusing inserted or removed units.
     def identity(unit):
         return unit.source, unit.context, unit.source_plural
-    previous = {identity(u): u for u in catalog.units}
+    from collections import defaultdict, deque
+    previous = defaultdict(deque)
+    for unit in catalog.units:
+        previous[unit.key if catalog.ext == ".json" else identity(unit)].append(unit)
     changed = []
     for unit in candidate.units:
-        old = previous.get(identity(unit))
+        prior = previous[unit.key if catalog.ext == ".json" else identity(unit)]
+        old = prior.popleft() if prior else None
+        if old is not None and catalog.ext == ".json" and unit.source_is_key and not old.source_is_key:
+            unit.source, unit.source_is_key = old.source, False
+        unit.imported = old.imported if old is not None else None
         if old is None or old.targets != unit.targets or old.reviewed != unit.reviewed:
             unit.reviewed = False
             unit.original = (("__ordverk_diff__",), True)
             changed.append(unit)
-    current = {identity(u) for u in candidate.units}
     return DiffProposal(catalog, candidate, digest(before), changed,
-                        sum(identity(u) not in current for u in catalog.units), patch.after)
+                        sum(len(units) for units in previous.values()), patch.after)

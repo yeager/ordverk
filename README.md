@@ -2,19 +2,19 @@
 
 En översättningsverkstad för Linux, byggd med **GTK4, libadwaita och Python**.
 Gränssnittet finns endast på svenska. Översätt, redigera och granska PO, Qt TS,
-XLIFF 1.2/2.x och JSON med svenska språkresurser och valfritt LLM-API.
+XLIFF 1.2/2.x och JSON med svenska språkresurser och valfri AI- eller översättningstjänst.
 
 ![Ordverk](docs/ordverk-screenshot.png)
 
 ## Kom igång
 
-Krav: Python 3.11+, GTK 4.10+, libadwaita 1.4+, PyGObject, Git samt valfritt
+Krav: Python 3.11+, GTK 4.10+, libadwaita 1.4+, PyGObject, Git, GNU Gettext samt valfritt
 Hunspell och Aspell. Både Debian/Ubuntu och Fedora kan köra appen.
 
 Debian/Ubuntu:
 
 ```sh
-sudo apt install python3 python3-venv python3-gi gir1.2-gtk-4.0 gir1.2-adw-1 git hunspell aspell locales
+sudo apt install python3 python3-venv python3-gi gir1.2-gtk-4.0 gir1.2-adw-1 git gettext hunspell aspell locales
 # På Ubuntu finns GTK:s svenska översättningar i ett separat språkpaket:
 # sudo apt install language-pack-gnome-sv
 ./scripts/install.sh
@@ -24,7 +24,7 @@ sudo apt install python3 python3-venv python3-gi gir1.2-gtk-4.0 gir1.2-adw-1 git
 Fedora:
 
 ```sh
-sudo dnf install python3 python3-pip python3-gobject gtk4 libadwaita git hunspell aspell glibc-langpack-sv
+sudo dnf install python3 python3-pip python3-gobject gtk4 libadwaita git gettext hunspell aspell glibc-langpack-sv
 ./scripts/install.sh
 ./run.sh
 ```
@@ -68,8 +68,13 @@ Standardgränsen är 100 strängar per körning och kan ändras i avancerade ins
 
 ## Föröversättning och diff
 
-**Föröversätt** låter dig välja hela filen, aktuell sträng eller valfria strängar
-markerade med kryssrutorna. Välj översättningsminne och ordlistor, AI eller
+**Föröversätt** låter dig välja hela filen, aktuell sträng, visade strängar eller
+valfria strängar markerade med kryssrutorna. Fler förval finns för oöversatta,
+översatta, delvis översatta, granskade, strängar att granska, ändrade/oförändrade
+sedan import, osparade ändringar, nya strängar och flera former. Samma filter
+finns i vänsterpanelen. Ändringar sedan import jämförs med innehållet när filen
+öppnades och finns kvar efter sparning. Föröversättningsdialogen visar antal i
+urvalet. Välj översättningsminne och ordlistor, AI eller
 språkresurser följt av AI. Ordlistor används bara för entydiga hela träffar.
 Förslagen förhandsgranskas före tillämpning. Ifyllda fält ersätts bara om du
 aktiverar det. Sena resultat skriver inte över strängar du redigerat under arbetet.
@@ -80,6 +85,32 @@ Kontext och radnummer måste stämma exakt. Du kan markera ändringarna som
 variant före tillämpning. Diffen inkluderar också sina metadata- och
 strukturändringar. Grundfilerna skrivs först när du väljer Spara. Nya eller
 borttagna hela filer och binära diffar stöds inte.
+
+**Importera → Uppdatera PO från POT** sammanfogar en ny mall med aktuell PO-fil
+med GNU Gettext. Osparade översättningar ingår. Exakta träffar behålls och
+liknande träffar kan tas med som luddiga; detta kan stängas av. En
+förhandsgranskning visar antalet matchande, nya/ändrade, borttagna och luddiga
+strängar. Borttagna poster bevaras som föråldrade. `POT-Creation-Date` hämtas
+från mallen; om fältet saknas behålls tidigare datum. Uppdateringen tillämpas i
+arbetskopian och originalfilen skrivs först vid Spara.
+
+## Lokal export
+
+**Exportera…** exporterar aktuell fil eller alla öppnade filer till en vald
+mapp. Välj **originalformat, PO, Qt TS, XLIFF 1.2, XLIFF 2.0, JSON eller diff**.
+Osparade ändringar ingår. Befintliga filer ersätts inte; ett numrerat tillägg
+gör filnamnet unikt. Exporten ändrar inte arbetskopians sparningsstatus.
+
+Vid formatbyte exporteras varje plural-/längdvariant som en separat post med
+formen i kontexten. Inlinekoder återges som text. Välj originalformatet för
+att behålla formatspecifik struktur och metadata. PO-export anger Ordverk som
+generator och kompletterar nödvändiga MIME-fält. JSON-export använder explicita
+källtexter och måltexter med kontext, kommentarer och granskningsstatus.
+
+**Diff mot originalfilen vid import** skapar unified diff mot den ursprungliga
+importen, även efter senare sparningar. Både strängar och PO-huvud ingår.
+Diffen förhandsvisas och kontrolleras genom att appliceras på importens innehåll.
+Även filer utan avslutande radbrytning stöds.
 
 ## Import och export till tjänster
 
@@ -107,10 +138,27 @@ skickas inte automatiskt av Ordverk.
 
 ## Redigering och kvalitet
 
-Vänsterpanelen visar strängar med sökning och statusfilter. I mitten finns
+Vänsterpanelen visar strängar med sökning, statusfilter och strängnummer från
+originalfilens ordning. Numren behålls vid sökning och filtrering. I mitten finns
 källtext och en fritt redigerbar svensk översättning, kontext, kommentarer och
 separata plural-/längdvarianter. Högerpanelen visar minnesträffar, terminologi
 och AI-förslag med motivering. Redigeraren har ångra/gör om.
+
+**Huvudmenyn → Redigera PO-huvud…** redigerar projekt/version, felrapporteringsadress,
+mallens datum, revisionsdatum, senaste översättare, översättningsgrupp,
+huvudkommentar och egna huvudfält. Ändringarna kan granskas innan filen sparas.
+
+Under **Inställningar → Enkelt → Översättare** anger du namn och e-postadress.
+PO-sparning uppdaterar normalt `Last-Translator` från dessa uppgifter samt
+`PO-Revision-Date` till aktuellt datum, tid och tidszon. Saknas en egen
+identitet behålls tidigare översättare. `POT-Creation-Date` ändras av en ny
+POT-import eller i huvudredigeraren. `X-Generator` sätts till `Ordverk 0.2`.
+Inställningarna sparas i `~/.ordverk/settings.json`.
+
+Vid avslut med osparade ändringar visas berörda filer och valen **Fortsätt arbeta**,
+**Stäng utan att spara** och **Spara alla och avsluta**. Avbruten eller misslyckad
+sparning lämnar appen öppen. Pågående filjobb behöver slutföras eller avbrytas
+innan avslut. Även ändringar i PO-huvudet och kopplade JSON-källtexter omfattas.
 
 | Resurs | Användning |
 | --- | --- |
@@ -168,23 +216,46 @@ Miljövariabeln `ORDVERK_HOME` kan välja en annan cachekatalog.
 ## AI och inställningar
 
 **Enkelt**: projektets sammanhang, domän, importguide, uppdateringar,
-API-basadress, modell och sessionsnyckel.
+tjänsteförval, API-basadress, modell, sessionsnyckel och översättningsanvisningar.
 
 **Avancerat**: resursval, motorer, egna ordlistesökvägar, miljövariabel för
-API-nyckeln och gränser för automatiskt arbete.
+API-nyckeln, antal närliggande strängar i AI-kontexten och gränser för automatiskt arbete.
 
-API-stödet använder ett [Chat Completions-kompatibelt format](https://developers.openai.com/api/reference/python/resources/chat/subresources/completions/methods/create).
-Ange tjänstens basadress inklusive exempelvis `/v1` och ett modellnamn som
-tjänsten stöder. Lokalt fungerar exempelvis en kompatibel server på
-`http://localhost:11434/v1`; fjärranslutningar kräver HTTPS. Modellnamn är inte hårdkodade.
+Inställningarna har förval för **OpenAI, Anthropic/Claude, X/Grok och DeepL**,
+samt en egen OpenAI-kompatibel tjänst. DeepL har separata val för API Free och
+API Pro. Förvalen fyller i adress, modell och miljövariabel för nyckeln;
+adress och modell kan anpassas. DeepL väljer modell automatiskt.
+
+| Förval | Modell | API |
+| --- | --- | --- |
+| OpenAI | gpt-5.6-terra | Chat Completions |
+| Anthropic / Claude | claude-sonnet-5 | Messages |
+| X / Grok | grok-4.6 | Chat Completions |
+| DeepL API Free / Pro | Väljs av tjänsten | Textöversättning |
+| Egen tjänst | Valfri | OpenAI-kompatibelt |
+
+Lokalt fungerar exempelvis en kompatibel server på `http://localhost:11434/v1`;
+fjärranslutningar kräver HTTPS. Konton kan ha olika modelltillgång.
+API-kontrakten och officiella referenser finns i [docs/API.md](docs/API.md).
+
+**Kontext till översättningen** kombinerar manuellt projektsammanhang och egna
+översättningsanvisningar med filnamn, projektmetadata, kommentarer,
+källkodshänvisningar, pluralform och närliggande strängar. Automatisk filkontext
+kan stängas av; antalet grannsträngar kan väljas mellan 0 och 10 per sida.
+Översättningsminne och terminologi kompletterar underlaget. **Visa kontext till AI**
+visar underlaget utan API-anrop. Bara den valda källtexten översätts.
+
+DeepL får kontext via sitt särskilda kontextfält. Platshållare och inlinekoder
+skyddas med XML-markörer och kontrolleras efter svaret. Samma lokala
+kvalitetskontroller granskar förslag från samtliga tjänster.
 
 Nyckeln kan anges för sessionen, läsas från `ORDVERK_API_KEY` (valbart namn)
 eller sparas i en stödd Secret Service/KWallet-nyckelring. Den skrivs aldrig till
 `settings.json`. API-anrop skickar vald källtext, aktuell översättning, kommentarer,
-projektkontext samt relevanta minnes- och termträffar till den valda tjänsten.
+projektkontext, aktiverad filkontext samt relevanta minnes- och termträffar till den valda tjänsten.
 Det sker när du begär ett AI-förslag eller uttryckligen har aktiverat automatisk AI.
 
-Modellen ombeds lämna översättning och kort motivering som JSON. Resultatet
+LLM-tjänster ombeds lämna översättning och kort motivering som JSON. Resultatet
 granskas med de lokala kontrollerna. Ett sent API-svar får inte skriva över en
 sträng som du ändrat under anropet. Nätverksanrop har tidsgränser och inga
 automatiska försök som kan upprepa kostnadsbelagda anrop.
@@ -215,11 +286,16 @@ tidsgräns. Filskrivningar slutförs atomiskt.
   bevaras. För strängnycklar som `menu.save` kopplar du en engelsk käll-JSON,
   eller skapar en svensk arbetskopia från källfilen via importguiden.
 
-Oförändrade filer återges byte för byte. Ändrade filer serialiseras på nytt;
+Oförändrade arbetskopior återges byte för byte. Vid PO-sparning/export kan
+generator-, MIME- och översättaruppgifter uppdateras. Ändrade filer serialiseras på nytt;
 indrag och citatstil kan därför ändras utan att innehållets struktur ändras.
 Sparning skapar en innehållsidentifierad `.ordverk-….bak` bredvid en befintlig
 ändrad fil och kontrollerar om filen har ändrats utanför Ordverk. Exporten
-tolkas på nytt innan den skrivs. Sparning konverterar inte mellan filformat.
+tolkas på nytt innan den skrivs. Efter varje sparning och export läses filen
+tillbaka, jämförs byte för byte och tolkas igen. Sparning kontrollerar också
+att antal strängar, samtliga former och översättningar bevaras. PO kontrolleras
+med Gettexts `msgfmt --check-format`. Filen markeras som sparad först när
+kontrollerna passerat. Formatbyte görs genom exportdialogen.
 
 JSON har ingen gemensam granskningsflagga. Ordverk bevarar dess granskningsstatus
 i `~/.ordverk/catalogs` när filen sparas, tillsammans med kopplade källtexter. Ändrad fil eller källreferens ogiltigförklarar sparad granskningsstatus.
@@ -228,6 +304,7 @@ i `~/.ordverk/catalogs` när filen sparas, tillsammans med kopplade källtexter.
 
 | Tangenter | Åtgärd |
 | --- | --- |
+| Ctrl+Q | Avsluta med kontroll av osparade ändringar |
 | Ctrl+O | Importera filer |
 | Ctrl+S | Spara aktuell fil |
 | Ctrl+Skift+S | Spara som |
@@ -241,7 +318,7 @@ i `~/.ordverk/catalogs` när filen sparas, tillsammans med kopplade källtexter.
 ./scripts/install.sh
 .venv/bin/python -m pip install -e '.[dev]'
 .venv/bin/python -m pytest
-xvfb-run -a .venv/bin/python tests/gtk_smoke.py
+GDK_BACKEND=x11 GSK_RENDERER=cairo GTK_A11Y=test xvfb-run -a dbus-run-session -- .venv/bin/python tests/gtk_smoke.py
 .venv/bin/python -m ruff check src
 desktop-file-validate data/io.github.yeager.Ordverk.desktop
 .venv/bin/python -m build

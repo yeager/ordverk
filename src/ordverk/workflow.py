@@ -5,6 +5,7 @@ import copy
 from dataclasses import dataclass
 
 from .importers import Cancelled, check_cancel
+from .ai_context import catalog_context
 
 
 @dataclass(frozen=True)
@@ -27,16 +28,28 @@ def batch_translate(catalogs, store, quality, translator=None, *, limit=100, can
         raise ValueError("Välj språkresurser, AI eller språkresurser följt av AI.")
     if method == "ai" and translator is None:
         raise ValueError("Konfigurera en AI-anslutning först.")
-    # Capture all inputs once, before the worker begins making requests.
-    work = [(catalog, unit, copy.deepcopy(unit)) for catalog in catalogs for unit in catalog.units
-            if selected is None or (id(catalog), unit.key) in selected]
+    # Count all eligible variants, but only copy units that this run can process.
+    work, eligible, prepared = [], 0, 0
+    try:
+        check_cancel(cancel)
+        for catalog in catalogs:
+            for index, unit in enumerate(catalog.units):
+                check_cancel(cancel)
+                if unit.source_is_key or (selected is not None and (id(catalog), unit.key) not in selected):
+                    continue
+                count = sum(overwrite or not target for target in unit.targets)
+                eligible += count
+                if count and (limit is None or prepared < limit):
+                    work.append((catalog, unit, copy.deepcopy(unit), index))
+                    prepared += count
+    except Cancelled:
+        return [], ["Arbetet avbröts innan översättningen började."]
     changes, messages = [], []
     attempted = 0
-    eligible = sum(overwrite or not target for _, _original, unit in work if not unit.source_is_key for target in unit.targets)
     limit = eligible if limit is None else limit
     total = min(limit, eligible)
     try:
-        for catalog, original, unit in work:
+        for catalog, original, unit, index in work:
             for variant, target in enumerate(unit.targets):
                 check_cancel(cancel)
                 if (target and not overwrite) or unit.source_is_key:
@@ -56,7 +69,9 @@ def batch_translate(catalogs, store, quality, translator=None, *, limit=100, can
                     issues = quality.check(candidate, variant)
                 elif translator is not None and method != "resources":
                     try:
-                        result = translator.suggest(unit, variant, cancel)
+                        neighbors = getattr(getattr(translator, "settings", None), "ai_context_neighbors", 2)
+                        context = catalog_context(catalog, original, neighbors, index=index)
+                        result = translator.suggest(unit, variant, cancel, context)
                         proposal, origin, issues = result.translation, f"AI · {result.model}", result.issues
                     except ValueError as exc:
                         messages.append(f"{catalog.name}: {exc}")
@@ -70,6 +85,8 @@ def batch_translate(catalogs, store, quality, translator=None, *, limit=100, can
                 progress(f"Föröversätter {attempted}/{total}", attempted, total)
     except Cancelled:
         messages.append("Arbetet avbröts. Färdiga förslag finns kvar.")
+    if attempted >= limit and eligible > attempted:
+        messages.append(f"Gränsen {limit} strängar nåddes. Starta igen för att fortsätta.")
     return changes, messages
 
 

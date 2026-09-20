@@ -144,16 +144,28 @@ class Unit:
     revision: int = 0
     flags: list[str] = field(default_factory=list)
     original: tuple = field(init=False)
+    imported: tuple | None = field(init=False)
 
     def __post_init__(self):
         self.checkpoint()
+        self.imported = self.import_state()
+
+    def import_state(self):
+        return (self.source, self.source_plural, tuple(self.targets), self.reviewed,
+                self.context, self.notes, self.references, tuple(self.variants), self.source_is_key)
+
+    @property
+    def changed_since_import(self):
+        return self.imported != self.import_state()
 
     def checkpoint(self):
         self.original = (tuple(self.targets), self.reviewed)
+        self.original_source = (self.source, self.source_is_key)
 
     @property
     def changed(self):
-        return self.original != (tuple(self.targets), self.reviewed)
+        return (self.original != (tuple(self.targets), self.reviewed)
+                or self.original_source != (self.source, self.source_is_key))
 
     @property
     def status(self):
@@ -178,11 +190,15 @@ class Catalog:
         self.origin = origin or str(self.path or name)
         self.ext = Path(name).suffix.lower()
         self.raw = data
+        self.import_raw = data
+        self.import_name = name
         self.fingerprint = digest(data)
         self._pending_structure = False
+        self._dirty_hint = None
         self.units: list[Unit] = []
         self.language = ""
         self.reference = reference
+        self._saved_reference = reference
         if self.ext in {".po", ".pot"}:
             self._load_po(data)
         elif self.ext in {".ts", ".xlf", ".xliff"}:
@@ -197,6 +213,8 @@ class Catalog:
             raise ValueError(f"Filformatet {self.ext} stöds inte.")
         if not self.units:
             raise ValueError("Filen innehåller inga redigerbara översättningssträngar.")
+        self.import_encoding = self.po.encoding if hasattr(self, "po") else (
+            self.tree.docinfo.encoding or "utf-8") if hasattr(self, "tree") else "utf-8-sig"
 
     @classmethod
     def open(cls, path, **kwargs):
@@ -204,11 +222,21 @@ class Catalog:
         result = cls(path.name, path.read_bytes(), path=path, **kwargs)
         from .state import restore_state
         restore_state(result)
+        result._saved_reference = result.reference
+        for unit in result.units:
+            unit.imported = unit.import_state()
         return result
 
     @property
     def dirty(self):
-        return getattr(self, "_pending_structure", False) or any(unit.changed for unit in self.units)
+        if self._pending_structure or self.reference != self._saved_reference:
+            return True
+        if self._dirty_hint:
+            index, unit = self._dirty_hint
+            if index < len(self.units) and self.units[index] is unit and unit.changed:
+                return True
+        self._dirty_hint = next(((index, unit) for index, unit in enumerate(self.units) if unit.changed), None)
+        return self._dirty_hint is not None
 
     def _load_po(self, data):
         encoding = polib.detect_encoding(data)
@@ -318,7 +346,7 @@ class Catalog:
         if isinstance(self.json, dict):
             self.language = next((self.json[k] for k in metadata if isinstance(self.json.get(k), str)), "")
 
-        def add(path, source, value, context="", source_is_key=False):
+        def add(path, source, value, context="", source_is_key=False, notes="", reviewed=False):
             if reference_data is not None and source_is_key:
                 try:
                     source = lookup(reference_data, path)
@@ -330,7 +358,8 @@ class Catalog:
                         source = str(path[-1])
             self.units.append(Unit(json.dumps(path, ensure_ascii=False), source, [value],
                                    context=context or "/".join(map(str, path)),
-                                   source_is_key=source_is_key, reviewed=False, binding=path))
+                                   source_is_key=source_is_key, notes=notes,
+                                   reviewed=reviewed is True and bool(value), binding=path))
 
         def walk(obj, path=()):
             if isinstance(obj, dict):
@@ -340,7 +369,9 @@ class Catalog:
                 if isinstance(obj.get("source"), str):
                     value = obj.get(target_key, "")
                     if isinstance(value, str):
-                        add(path + (target_key,), obj["source"], value, str(obj.get("context", "")))
+                        notes = obj.get("notes", "")
+                        add(path + (target_key,), obj["source"], value, str(obj.get("context", "")),
+                            notes=notes if isinstance(notes, str) else "", reviewed=obj.get("reviewed", False))
                         return
                     if isinstance(value, dict):
                         for form, text in value.items():
@@ -424,6 +455,7 @@ class Catalog:
         for before, after in zip(template.units, result.units):
             if template.ext == ".json":
                 after.source, after.source_is_key = before.source, False
+            after.imported = after.import_state()
         return result
 
     def render(self) -> bytes:
@@ -454,6 +486,8 @@ class Catalog:
                 if unit.changed:
                     parent = lookup(obj, unit.binding[:-1])
                     parent[unit.binding[-1]] = unit.targets[0]
+                    if isinstance(parent, dict) and isinstance(parent.get("source"), str) and "reviewed" in parent:
+                        parent["reviewed"] = unit.reviewed
             match = re.search(rb"\n([ \t]+)\S", self.raw)
             indent = match.group(1).decode() if match else 2
             result = json.dumps(obj, ensure_ascii=False, indent=indent) + "\n"
@@ -527,9 +561,13 @@ class Catalog:
             raise ValueError("Spara med samma filformat som originalet.")
         if path.is_symlink():
             raise ValueError("Välj den verkliga filen i stället för en symbolisk länk.")
+        from .po_header import stamp_generator
+        from .consistency import check_roundtrip, parse_checked, verify_written
+        stamp_generator(self)
         data = self.render()
         # Reparse before touching disk: serializer bugs must never corrupt an existing catalog.
-        Catalog(path.name, data, reference=self.reference)
+        parsed = parse_checked(path.name, data, reference=self.reference)
+        check_roundtrip(self, parsed)
         expected = path.read_bytes() if path.exists() else None
         if self.path == path and (expected is None or digest(expected) != self.fingerprint):
             raise ValueError("Filen har ändrats eller tagits bort utanför Ordverk. Spara som en ny fil.")
@@ -545,13 +583,20 @@ class Catalog:
         if path.is_symlink() or (path.read_bytes() if path.exists() else None) != expected:
             raise ValueError("Filen ändrades under sparningen. Försök med ett nytt filnamn.")
         atomic_write(path, data, mode)
-        refreshed = Catalog(path.name, data, path=path, origin=self.origin, reference=self.reference)
+        refreshed = verify_written(path, data)
+        check_roundtrip(self, refreshed)
+        refreshed.path, refreshed.origin, refreshed.reference = path, self.origin, self.reference
+        refreshed._saved_reference = self.reference
+        refreshed.import_raw = self.import_raw
+        refreshed.import_name = self.import_name
+        refreshed.import_encoding = self.import_encoding
         # JSON has no portable review flag. Persist local state alongside the cache.
         for before, after in zip(self.units, refreshed.units):
             after.reviewed = before.reviewed
             if self.ext == ".json":
                 after.source, after.source_is_key = before.source, before.source_is_key
             after.checkpoint()
+            after.imported = before.imported
         self.__dict__.update(refreshed.__dict__)
         from .state import save_state
         save_state(self)

@@ -1,5 +1,5 @@
 from ordverk.catalog import Catalog
-from ordverk.progress import ProgressState
+from ordverk.progress import LatestProgress, ProgressState
 from ordverk.statistics import statistics
 from ordverk.swedish import diagnostic
 from types import SimpleNamespace
@@ -35,3 +35,11 @@ def test_swedish_diagnostics_keep_placeholder_details():
     assert message.startswith("Platshållarna skiljer sig")
     assert "'%s': 1" in message
     assert diagnostic(SimpleNamespace(rule="fuzzy", message="Fuzzy translation needs review")).startswith("Översättningen")
+
+
+def test_progress_burst_keeps_the_latest_value_without_a_backlog():
+    pending = LatestProgress()
+    for i in range(100000):
+        pending.put("Översätter", i + 1, 100000)
+    assert pending.take() == ("Översätter", 100000, 100000)
+    assert pending.take() is None

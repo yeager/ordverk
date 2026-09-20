@@ -18,10 +18,17 @@ def config_dir():
 
 @dataclass
 class Settings:
+    translator_name: str = ""
+    translator_email: str = ""
+    update_po_header: bool = True
+    ai_provider: str = "custom"
     base_url: str = ""
     model: str = ""
     api_key_env: str = "ORDVERK_API_KEY"
     project_context: str = ""
+    ai_instructions: str = ""
+    ai_auto_context: bool = True
+    ai_context_neighbors: int = 2
     domain: str = "Allmänt"
     hunspell_dictionary: str = ""
     aspell_directory: str = ""

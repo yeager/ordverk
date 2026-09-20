@@ -3,7 +3,7 @@
 Ordverks kod distribueras under GPL-3.0-or-later. Licenstext finns i `LICENSE`.
 
 Programmet integrerar följande projekt via installerade bibliotek eller
-externa stavningsmotorer. Deras egna licenser gäller för respektive komponent.
+externa verktyg. Deras egna licenser gäller för respektive komponent.
 
 | Projekt | Licens / ursprung |
 | --- | --- |
@@ -13,6 +13,7 @@ externa stavningsmotorer. Deras egna licenser gäller för respektive komponent.
 | [lxml](https://lxml.de/) | BSD, med libxml2/libxslt enligt respektive licens |
 | [GTK](https://www.gtk.org/) / [libadwaita](https://gnome.pages.gitlab.gnome.org/libadwaita/) / PyGObject | LGPL enligt respektive komponent |
 | [keyring](https://pypi.org/project/keyring/) | MIT |
+| [GNU Gettext](https://www.gnu.org/software/gettext/) | Systemets msgmerge och msgfmt; distribueras separat av distributionen |
 
 De stora språkfilerna ingår inte i Ordverks källarkiv. De hämtas till användarens
 cache från nedanstående projekt; revisionsidentifierare, originaladress och
