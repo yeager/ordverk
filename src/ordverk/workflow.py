@@ -36,43 +36,43 @@ def batch_translate(catalogs, store, quality, translator=None, *, limit=100, can
     total = min(limit, eligible)
     try:
         for catalog, unit in work:
-                for variant, target in enumerate(unit.targets):
-                    check_cancel(cancel)
-                    if (target and not overwrite) or unit.source_is_key:
-                        continue
-                    if attempted >= limit:
-                        messages.append(f"Gränsen {limit} strängar nåddes. Starta igen för att fortsätta.")
+            for variant, target in enumerate(unit.targets):
+                check_cancel(cancel)
+                if (target and not overwrite) or unit.source_is_key:
+                    continue
+                if attempted >= limit:
+                    messages.append(f"Gränsen {limit} strängar nåddes. Starta igen för att fortsätta.")
+                    return changes, messages
+                attempted += 1
+                progress(f"Översätter {attempted}/{total}: {unit.source_for(variant)[:65]}", attempted - 1, total)
+                exact = store.exact_translation(unit.source_for(variant), unit.context) if method != "ai" else None
+                proposal, origin, issues = None, "", []
+                # Conflicting exact matches need context: don't let frequency silently decide.
+                if exact:
+                    proposal, origin = exact
+                    candidate = copy.deepcopy(unit)
+                    candidate.edit(variant, proposal)
+                    issues = quality.check(candidate, variant)
+                elif translator is not None and method != "resources":
+                    try:
+                        result = translator.suggest(unit, variant, cancel)
+                        proposal, origin, issues = result.translation, f"AI · {result.model}", result.issues
+                    except ValueError as exc:
+                        messages.append(f"{catalog.name}: {exc}")
+                        # Stop on API errors instead of repeatedly spending requests on a failing service.
                         return changes, messages
-                    attempted += 1
-                    progress(f"Översätter {attempted}/{total}: {unit.source_for(variant)[:65]}", attempted - 1, total)
-                    exact = store.exact_translation(unit.source_for(variant), unit.context) if method != "ai" else None
-                    proposal, origin, issues = None, "", []
-                    # Conflicting exact matches need context: don't let frequency silently decide.
-                    if exact:
-                        proposal, origin = exact
-                        candidate = copy.deepcopy(unit)
-                        candidate.edit(variant, proposal)
-                        issues = quality.check(candidate, variant)
-                    elif translator is not None and method != "resources":
-                        try:
-                            result = translator.suggest(unit, variant, cancel)
-                            proposal, origin, issues = result.translation, f"AI · {result.model}", result.issues
-                        except ValueError as exc:
-                            messages.append(f"{catalog.name}: {exc}")
-                            # Stop on API errors instead of repeatedly spending requests on a failing service.
-                            return changes, messages
-                    if proposal is not None and proposal != target:
-                        if any(issue.severity == "error" for issue in issues):
-                            messages.append(f"{unit.source_for(variant)[:70]}: förslag stoppat av kvalitetsfel.")
-                        else:
-                            changes.append(Change(catalog, unit.key, unit.revision, variant, target, proposal, origin, issues))
-                    progress(f"Föröversätter {attempted}/{total}", attempted, total)
+                if proposal is not None and proposal != target:
+                    if any(issue.severity == "error" for issue in issues):
+                        messages.append(f"{unit.source_for(variant)[:70]}: förslag stoppat av kvalitetsfel.")
+                    else:
+                        changes.append(Change(catalog, unit.key, unit.revision, variant, target, proposal, origin, issues))
+                progress(f"Föröversätter {attempted}/{total}", attempted, total)
     except Cancelled:
         messages.append("Arbetet avbröts. Färdiga förslag finns kvar.")
     return changes, messages
 
 
-def apply_changes(changes):
+def apply_changes(changes, on_applied=None):
     applied, skipped = 0, 0
     # All forms share a revision, so compare against the revision at the start of application.
     catalogs = {id(change.catalog): change.catalog for change in changes}
@@ -84,5 +84,7 @@ def apply_changes(changes):
             skipped += 1
             continue
         unit.edit(change.variant, change.after)
+        if on_applied:
+            on_applied(change)
         applied += 1
     return applied, skipped

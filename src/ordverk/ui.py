@@ -914,13 +914,14 @@ class Window(Adw.ApplicationWindow):
                 return
             unit.reviewed = True
             unit.revision += 1
-            if not unit.source_is_key:
-                for variant, target in enumerate(unit.targets):
-                    self.store.remember(unit.source_for(variant), target, unit.context)
             self.refresh_files()
             if self.catalog is catalog:
                 self.filter_units()
-            self.status.set_label("Granskad · sparad som förslag i ditt eget översättningsminne")
+            self.status.set_label("Strängen är granskad")
+            if not unit.source_is_key:
+                values = [(unit.source_for(v), target, unit.context) for v, target in enumerate(unit.targets)]
+                self.job("Sparar i ditt eget översättningsminne…", lambda _: [self.store.remember(*value) for value in values],
+                         lambda _: self.status.set_label("Granskad · sparad som förslag i ditt eget översättningsminne"))
         self.job("Kontrollerar alla varianter…", check, done)
 
     def start_workflow(self, catalogs, purpose, automatic, use_ai):
@@ -936,11 +937,7 @@ class Window(Adw.ApplicationWindow):
 
             def done(result):
                 changes, messages = result
-                applied, skipped = apply_changes(changes)
-                for change in changes:
-                    matching = next((u for u in change.catalog.units if u.key == change.key), None)
-                    if matching and matching.targets[change.variant] == change.after:
-                        self.session_statistics["ai" if change.origin.startswith("AI ·") else "memory"] += 1
+                applied, skipped = self.apply_translations(changes)
                 self.refresh_files()
                 self.filter_units()
                 self.update_statistics()
@@ -956,6 +953,11 @@ class Window(Adw.ApplicationWindow):
             PretranslateDialog(self).present()
         else:
             self.toast("Importera en fil först.")
+
+    def apply_translations(self, changes):
+        def count(change):
+            self.session_statistics["ai" if change.origin.startswith("AI ·") else "memory"] += 1
+        return apply_changes(changes, on_applied=count)
 
     def run_pretranslation(self, catalog, selected, method, overwrite):
         return self.job("Tar fram föröversättningar…", lambda cancel: batch_translate(
@@ -978,7 +980,7 @@ class Window(Adw.ApplicationWindow):
         text.get_buffer().set_text("\n\n".join(rows + messages) or "Inga nya förslag. Kontrollera källtexter och tillgängliga språkresurser.")
         root.append(scroll(text, vexpand=True))
         def apply():
-            applied, skipped = apply_changes(changes)
+            applied, skipped = self.apply_translations(changes)
             self.refresh_files()
             self.filter_units()
             self.update_statistics()
@@ -1132,7 +1134,7 @@ class Window(Adw.ApplicationWindow):
         box.append(label(f"{total.files} filer · {total.total} strängar · {total.source_words} ord i källtexterna", "dim-label"))
         box.append(label(f"{total.translated} översatta  ·  {total.reviewed} granskade  ·  {total.needs_review} att granska  ·  {total.remaining} återstår", wrap=True))
         box.append(label(f"Plural- och längdvarianter: {total.translated_variants} av {total.variants} ifyllda."))
-        box.append(label(f"Tillämpade förslag denna session: {self.session_statistics['memory']} från minnet, {self.session_statistics['ai']} från AI."))
+        box.append(label(f"Tillämpade förslag denna session: {self.session_statistics['memory']} från språkresurser, {self.session_statistics['ai']} från AI."))
         grid = Gtk.Grid(column_spacing=22, row_spacing=12)
         for col, title in enumerate(["Fil", "Strängar", "Översatta", "Granskade", "Kvar"]):
             grid.attach(label(title, "heading"), col, 0, 1, 1)

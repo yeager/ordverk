@@ -2,7 +2,6 @@
 import copy
 
 from .dialogs import Adw, Gtk
-from .importers import check_cancel
 
 
 class DiffDialog(Adw.Window):
@@ -88,20 +87,25 @@ class DiffDialog(Adw.Window):
         def check(cancel):
             errors = []
             for unit in proposal.changed:
-                check_cancel(cancel)
+                if cancel.is_set():
+                    return proposal, ["Granskningen avbröts. Dina diffändringar finns kvar här."]
                 if unit.reviewed:
                     if not all(unit.targets):
                         errors.append(f"{unit.source}: alla varianter behöver översättas innan de godkänns.")
                     for variant in range(len(unit.targets)):
                         errors.extend(i.message for i in self.parent.quality.check(unit, variant) if i.severity == "error")
+            return proposal, errors
+        def done(result):
+            self.set_sensitive(True)
+            ready, errors = result
             if errors:
-                raise ValueError("Åtgärda felen eller välj luddig status:\n" + "\n".join(errors))
-            return proposal
-        def done(ready):
+                self.parent.error("Åtgärda felen eller välj luddig status:\n" + "\n".join(errors), parent=self)
+                return
             ready.apply()
             self.parent.refresh_files()
             self.parent.filter_units()
             self.parent.update_statistics()
             self.parent.toast("Diffens ändringar är inkluderade. Spara filen när du är klar.")
-        if self.parent.job("Kontrollerar diffens granskade strängar…", check, done):
             self.close()
+        if self.parent.job("Kontrollerar diffens granskade strängar…", check, done):
+            self.set_sensitive(False)
