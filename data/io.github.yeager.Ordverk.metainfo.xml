@@ -15,6 +15,12 @@
   <developer id="io.github.yeager"><name>Daniel Nylander</name></developer>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.4" date="2026-09-20">
+      <description>
+        <p>Importstatistik i en popup med automatisk kvalitetsgranskning och uppdaterade resultat efter rättningar.</p>
+        <p>Nya strängfilter för stavfel, skiftläge, platshållare, taggar och andra kvalitetsanmärkningar. Skiftläge jämförs i båda riktningarna.</p>
+      </description>
+    </release>
     <release version="0.3" date="2026-09-20">
       <description>
         <p>AI-förval och översättningskontext, uppdatering från POT-filer, redigering av PO-huvud och export till alla format.</p>

@@ -1,3 +1,10 @@
+ordverk (0.4-1) unstable; urgency=medium
+
+  * Add live import statistics and automatic background quality review.
+  * Add quality filters and bidirectional initial-case checks.
+
+ -- Daniel Nylander <daniel@danielnylander.se>  Sun, 20 Sep 2026 15:18:31 +0200
+
 ordverk (0.3-1) unstable; urgency=medium
 
   * Add translation providers, context, exports and PO/POT maintenance.

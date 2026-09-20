@@ -1,4 +1,4 @@
-# Verifiering av Ordverks arbetsversion
+# Verifiering av Ordverk 0.4
 
 Verifierat den 20 september 2026. Första releasen är 0.2.
 

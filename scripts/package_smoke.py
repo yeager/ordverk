@@ -15,7 +15,7 @@ with tempfile.TemporaryDirectory() as cache:
     from gi.repository import Adw, GLib, Gtk
     import ordverk
     assert not str(Path(ordverk.__file__).resolve()).startswith(str(Path.cwd() / "src"))
-    assert __version__ == "0.3"
+    assert __version__ == "0.4"
     app = Application()
     app.register(None)
     window = Window(app, settings=Settings(auto_update_resources=False), startup=False)

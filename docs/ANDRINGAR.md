@@ -1,6 +1,6 @@
 # Ändringslogg
 
-## Kommande
+## 0.4 — 20 september 2026
 
 - Importstatistik i en popup som uppdateras med bakgrundsgranskningens resultat.
 - Strängfilter för stavfel, skiftläge och andra kvalitetsanmärkningar, även som
