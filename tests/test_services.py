@@ -42,6 +42,20 @@ def test_tm_context_fuzzy_and_import_is_idempotent(store, tmp_path):
     assert not store.memory("Bad")
 
 
+def test_tm_can_retrieve_by_current_translation_but_score_against_source(store, tmp_path):
+    path = tmp_path / "tm.po"
+    po = polib.POFile()
+    po.extend([polib.POEntry(msgid="About Gitte", msgstr="Om Gitte")])
+    po.save(str(path))
+    store.import_po(path)
+
+    results = store.memory("About Gitte", alternate_sources=("_Om Gitte",))
+
+    assert results[0].source == "About Gitte"
+    assert results[0].target == "Om Gitte"
+    assert results[0].score == 1.0
+
+
 def test_tm_update_removes_old_values_and_updates_fts(store, tmp_path):
     path = tmp_path / "tm.po"
     path.write_text('msgid "Save"\nmsgstr "Spara"\n')

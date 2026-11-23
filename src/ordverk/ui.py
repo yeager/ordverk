@@ -979,7 +979,11 @@ class Window(Adw.ApplicationWindow):
         source, context = unit.source_for(self.variant), unit.context
         self.suggestion_meter = ProgressState()
         self.start_progress_timer()
-        future = self.executor.submit(lambda: (self.store.memory(source, context, 8), self.store.terminology(source, 8)))
+        alternate_sources = (unit.targets[self.variant],) if unit.targets[self.variant] else ()
+        future = self.executor.submit(lambda: (
+            self.store.memory(source, context, 8, alternate_sources=alternate_sources),
+            self.store.terminology(source, 8),
+        ))
         self.suggestion_future = future
         def finish(f):
             def display():

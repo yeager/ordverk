@@ -136,14 +136,19 @@ class ResourceStore:
             db.execute("INSERT OR IGNORE INTO memory(source,target,origin,context) VALUES(?,?,?,?)",
                        (source, target, origin, context))
 
-    def memory(self, source, context="", limit=8):
+    def memory(self, source, context="", limit=8, alternate_sources=()):
+        # Include alternate source text (for example the current translation) in
+        # candidate retrieval, but score every result against the original.
+        search_sources = list(dict.fromkeys((source, *alternate_sources)))
         with self.connect() as db:
-            rows = list(db.execute("SELECT * FROM memory WHERE source=? LIMIT 60", (source,)))
-            tokens = list(dict.fromkeys(re.findall(r"\w+", source.casefold())))[:12]
-            if tokens and len(rows) < limit:
-                query = " OR ".join('"' + token + '"' for token in tokens)
-                rows += list(db.execute("""SELECT memory.* FROM memory_fts JOIN memory ON memory.id=memory_fts.rowid
-                    WHERE memory_fts MATCH ? ORDER BY bm25(memory_fts) LIMIT 80""", (query,)))
+            rows = []
+            for search_source in search_sources:
+                rows.extend(db.execute("SELECT * FROM memory WHERE source=? LIMIT 60", (search_source,)))
+                tokens = list(dict.fromkeys(re.findall(r"\w+", search_source.casefold())))[:12]
+                if tokens:
+                    query = " OR ".join('"' + token + '"' for token in tokens)
+                    rows.extend(db.execute("""SELECT memory.* FROM memory_fts JOIN memory ON memory.id=memory_fts.rowid
+                        WHERE memory_fts MATCH ? ORDER BY bm25(memory_fts) LIMIT 80""", (query,)))
         results, seen = [], set()
         for row in rows:
             identity = (row["source"], row["target"], row["origin"])
