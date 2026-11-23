@@ -1,5 +1,12 @@
 # Ändringslogg
 
+## 0.5 — 23 november 2026
+
+- Frågar efter översättarens namn och e-postadress när uppgifterna saknas vid
+  sparning av en PO-fil. Uppgifterna sparas i inställningarna och används för
+  `Last-Translator`; avbruten fråga sparar inte filen.
+- Uppdaterar `X-Generator` och paketens versionsmetadata till 0.5.
+
 ## 0.4 — 20 september 2026
 
 - Importstatistik i en popup som uppdateras med bakgrundsgranskningens resultat.

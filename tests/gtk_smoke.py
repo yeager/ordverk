@@ -82,15 +82,38 @@ path.write_bytes(example.read_bytes())
 window.import_paths([str(path)])
 pump_until(lambda: not window.busy)
 assert window.unit.source == "Save"
+window.settings.translator_name = "Daniel Nylander"
+window.settings.translator_email = "daniel@example.org"
+window.settings.save()
 window.selection.set_selected(1)
 window.set_target("Öppna en fil")
 assert window.unit.targets == ["Öppna en fil"]
 assert window.catalog.dirty
 window.save()
 pump_until(lambda: not window.busy)
-assert Catalog.open(path).units[1].targets == ["Öppna en fil"]
+saved_catalog = Catalog.open(path)
+assert saved_catalog.units[1].targets == ["Öppna en fil"]
+assert saved_catalog.po.metadata["Last-Translator"] == "Daniel Nylander <daniel@example.org>"
 assert not window.catalog.dirty
 assert window.unit.source == "Open a file"
+
+# A PO save asks for missing translator identity before opening the file chooser or writing.
+ask_identity = window.ask_translator_identity
+window.ask_translator_identity = lambda continue_save: None
+window.settings.translator_name = ""
+window.settings.translator_email = ""
+before_identity_prompt = path.read_bytes()
+window.catalog.units[1].edit(0, "Öppna igen")
+window.save()
+assert path.read_bytes() == before_identity_prompt
+window.ask_translator_identity = ask_identity
+window.settings.translator_name = "Daniel Nylander"
+window.settings.translator_email = "daniel@example.org"
+window.settings.save()
+window.save()
+pump_until(lambda: not window.busy)
+assert Catalog.open(path).po.metadata["Last-Translator"] == "Daniel Nylander <daniel@example.org>"
+
 window.mark_reviewed()
 pump_until(lambda: not window.busy)
 assert window.unit.reviewed

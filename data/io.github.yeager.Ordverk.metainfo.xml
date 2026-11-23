@@ -15,6 +15,11 @@
   <developer id="io.github.yeager"><name>Daniel Nylander</name></developer>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.5" date="2026-11-23">
+      <description>
+        <p>Ordverk frågar efter översättarens namn och e-postadress när de saknas och behövs för att spara en PO-fil. Uppgifterna sparas i inställningarna och skrivs till Last-Translator.</p>
+      </description>
+    </release>
     <release version="0.4" date="2026-09-20">
       <description>
         <p>Importstatistik i en popup med automatisk kvalitetsgranskning och uppdaterade resultat efter rättningar.</p>

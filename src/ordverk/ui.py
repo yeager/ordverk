@@ -27,7 +27,7 @@ from .remote_dialogs import Connections, MailDialog
 from .diff_dialog import DiffDialog
 from .export_dialog import ExportDialog
 from .header_dialog import HeaderDialog
-from .po_header import stamp_translator
+from .po_header import stamp_translator, translator_identity
 from .pot_dialog import choose_template
 from .diffs import parse_diff, propose_diff
 from .settings import Settings
@@ -1215,6 +1215,13 @@ class Window(Adw.ApplicationWindow):
                 self.toast("Avsluta pågående arbete innan du sparar.")
             return
 
+        if (catalog.ext in {".po", ".pot"} and self.settings.update_po_header
+                and (not self.settings.translator_name.strip() or not self.settings.translator_email.strip())):
+            self.ask_translator_identity(
+                lambda: self.save(save_as, catalog=catalog, on_saved=on_saved)
+            )
+            return
+
         def write(path):
             def finish(overwrite=False):
                 if self.busy:
@@ -1258,6 +1265,46 @@ class Window(Adw.ApplicationWindow):
             self.file_dialog("Spara översättning", write, save_name=name)
         else:
             write(catalog.path)
+
+    def ask_translator_identity(self, continue_save):
+        dialog = Adw.MessageDialog(
+            transient_for=self,
+            modal=True,
+            heading="Ange översättaruppgifter",
+            body="Namn och e-postadress används för Last-Translator i PO-filen.",
+        )
+        dialog.add_response("cancel", "Avbryt")
+        dialog.add_response("save", "Spara och fortsätt")
+        dialog.set_response_appearance("save", Adw.ResponseAppearance.SUGGESTED)
+        name = Gtk.Entry(placeholder_text="Namn", text=self.settings.translator_name)
+        email = Gtk.Entry(placeholder_text="E-postadress", text=self.settings.translator_email)
+        fields = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        fields.append(name)
+        fields.append(email)
+        dialog.set_extra_child(fields)
+
+        def response(_dialog, result):
+            if result != "save":
+                return
+            try:
+                name_text, email_text = name.get_text().strip(), email.get_text().strip()
+                if not name_text or not email_text:
+                    raise ValueError("Ange både namn och e-postadress.")
+                translator_identity(name_text, email_text)
+            except ValueError as error:
+                self.error(str(error))
+                return
+            self.settings.translator_name = name_text
+            self.settings.translator_email = email_text
+            try:
+                self.settings.save()
+            except OSError as error:
+                self.error(f"Översättaruppgifterna kunde inte sparas: {error}")
+                return
+            continue_save()
+
+        dialog.connect("response", response)
+        dialog.present()
 
     def choose_reference(self):
         catalog = self.catalog

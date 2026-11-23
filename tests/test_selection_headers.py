@@ -132,6 +132,21 @@ def test_save_stamp_updates_revision_but_keeps_template_date_and_unknown_identit
     assert catalog.po.metadata["Last-Translator"] == "Befintlig person"
 
 
+def test_configured_translator_identity_is_written_through_catalog_save(tmp_path):
+    catalog = Catalog(
+        "sv.po",
+        b'msgid ""\nmsgstr ""\n"Last-Translator: Forra personen\\n"\n\nmsgid "Save"\nmsgstr ""\n',
+    )
+    settings = Settings(translator_name="Ny översättare", translator_email="ny@example.org")
+
+    stamp_translator(catalog, settings)
+    path = tmp_path / "sv.po"
+    catalog.save(path)
+
+    reopened = Catalog.open(path)
+    assert reopened.po.metadata["Last-Translator"] == "Ny översättare <ny@example.org>"
+
+
 def test_json_reference_changes_count_as_unsaved_work(tmp_path):
     catalog = Catalog("sv.json", b'{"save":"Spara"}')
     source = tmp_path / "en.json"
