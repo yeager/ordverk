@@ -1,4 +1,4 @@
-# Verifiering av Ordverk 0.5
+# Verifiering av Ordverk 0.6
 
 Verifierat den 20 september 2026. Första releasen är 0.2.
 

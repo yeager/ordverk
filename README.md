@@ -1,4 +1,4 @@
-# Ordverk 0.5
+# Ordverk 0.6
 
 En översättningsverkstad för Linux, byggd med **GTK4, libadwaita och Python**.
 Gränssnittet finns endast på svenska. Översätt, redigera och granska PO, Qt TS,
@@ -179,7 +179,7 @@ Om uppgifterna saknas frågar Ordverk efter dem första gången du sparar en PO-
 De sparas i inställningarna. PO-sparning uppdaterar `Last-Translator` samt
 `PO-Revision-Date` till aktuellt datum, tid och tidszon. Saknas en egen
 identitet och frågan avbryts, sparas inte filen. `POT-Creation-Date` ändras av
-en ny POT-import eller i huvudredigeraren. `X-Generator` sätts till `Ordverk 0.5`.
+en ny POT-import eller i huvudredigeraren. `X-Generator` sätts till `Ordverk 0.6`.
 Inställningarna sparas i `~/.ordverk/settings.json`.
 
 Vid avslut med osparade ändringar visas berörda filer och valen **Fortsätt arbeta**,
@@ -374,7 +374,7 @@ GTK-gränssnittet. Se [tredjepartsnotiser](THIRD_PARTY.md) och
 
 ## Native paket och CI
 
-Aktuell release är **0.5**; första releasen var **0.2**. Se [ändringsloggen](docs/ANDRINGAR.md). GitHub Actions kör Linux-tester, GTK-test, Gitleaks,
+Aktuell release är **0.6**; första releasen var **0.2**. Se [ändringsloggen](docs/ANDRINGAR.md). GitHub Actions kör Linux-tester, GTK-test, Gitleaks,
 Debian-bygge med debhelper/pybuild och Fedora-bygge med RPM:s pyproject-makron.
 Paketen följer systemens standardplatser och deklarerar beroenden. `l10n-lint`
 och `svlang` levereras som separata `python3-*`-paket från verifierade källrevisioner.

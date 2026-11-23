@@ -1,3 +1,10 @@
+ordverk (0.6-1) unstable; urgency=medium
+
+  * Search translation memory by both source and current translation.
+  * Use the Swedish term luddig for fuzzy translation status.
+
+ -- Daniel Nylander <daniel@danielnylander.se>  Mon, 23 Nov 2026 12:30:00 +0100
+
 ordverk (0.5-1) unstable; urgency=medium
 
   * Ask for translator name and email before saving a PO file when missing.

@@ -1,5 +1,12 @@
 # Ändringslogg
 
+## 0.6 — 23 november 2026
+
+- Översättningsminnet söker även på den aktuella översättningen. Likheten visas
+  fortfarande mot originalsträngen, vilket gör en exakt originalträff 100 %.
+- Visar `fuzzy` konsekvent som **luddig** i svenska kvalitetsmeddelanden och
+  dokumentation.
+
 ## 0.5 — 23 november 2026
 
 - Frågar efter översättarens namn och e-postadress när uppgifterna saknas vid

@@ -1,5 +1,5 @@
 Name:           ordverk
-Version:        0.5
+Version:        0.6
 Release:        1%{?dist}
 Summary:        Swedish translation workbench for Linux
 License:        GPL-3.0-or-later
@@ -55,6 +55,10 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/io.github.yeager.Ordv
 %{_mandir}/man1/ordverk.1*
 
 %changelog
+* Mon Nov 23 2026 Daniel Nylander <daniel@danielnylander.se> - 0.6-1
+- Search translation memory by both source and current translation.
+- Use the Swedish term luddig for fuzzy translation status.
+
 * Mon Nov 23 2026 Daniel Nylander <daniel@danielnylander.se> - 0.5-1
 - Ask for translator identity when saving a PO file without configured details.
 - Save translator identity in settings and update Last-Translator.
