@@ -15,7 +15,7 @@ TRANSLATIONS = {
     "Swedish: 'y/n' should be 'j/n' (ja/nej)": "Använd ”j/n” (ja/nej) för svenska svarsalternativ.",
     "Source ends with period but translation does not": "Källtexten slutar med punkt, men översättningen saknar slutpunkt.",
     "Use typographic ellipsis (…) instead of three dots (...)": "Använd typografiskt uteslutningstecken (…) i stället för tre punkter (...).",
-    "Fuzzy translation needs review": "Översättningen är markerad som osäker och behöver granskas.",
+    "Fuzzy translation needs review": "Översättningen är markerad som luddig och behöver granskas.",
     "Extra ending punctuation (source has none)": "Översättningen har ett avslutande skiljetecken som saknas i källtexten.",
     "Source starts with uppercase, translation with lowercase": "Källtexten börjar med stor bokstav och översättningen med liten.",
     "Number formatting may not be localized (e.g. 1,000 should be 1 000 in some locales)": "Kontrollera svensk talformatering, exempelvis 1 000 i stället för 1,000.",

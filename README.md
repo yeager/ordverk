@@ -303,7 +303,7 @@ tidsgräns. Filskrivningar slutförs atomiskt.
 ## Filformat och sparning
 
 - PO bevarar metadata, kontext, kommentarer, referenser, formatflaggor och
-  pluralformer. Ändrade osäkra poster får `fuzzy` tills du markerar dem granskade.
+  pluralformer. Ändrade luddiga poster får flaggan `fuzzy` tills du markerar dem granskade.
 - Qt TS bevarar meddelandekontext, numerus, längdvarianter, status och okända attribut.
 - XLIFF bevarar dokumentstrukturen och taggar. Inlinekoder visas som `⟦1⟧`
   och `⟦/1⟧`; alla koder och deras nästling måste bevaras vid redigering.
