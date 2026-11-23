@@ -170,6 +170,11 @@ källtext och en fritt redigerbar svensk översättning, kontext, kommentarer oc
 separata plural-/längdvarianter. Högerpanelen visar minnesträffar, terminologi
 och AI-förslag med motivering. Redigeraren har ångra/gör om.
 
+Översättningsminnet söker med både originalsträngen och den aktuella
+översättningen. Likhetsprocenten beräknas alltid mot originalsträngen; därför
+kan en träff som hittas via den aktuella översättningen ändå visas som 100 % om
+den motsvarar originalet exakt.
+
 **Huvudmenyn → Redigera PO-huvud…** redigerar projekt/version, felrapporteringsadress,
 mallens datum, revisionsdatum, senaste översättare, översättningsgrupp,
 huvudkommentar och egna huvudfält. Ändringarna kan granskas innan filen sparas.
@@ -303,7 +308,8 @@ tidsgräns. Filskrivningar slutförs atomiskt.
 ## Filformat och sparning
 
 - PO bevarar metadata, kontext, kommentarer, referenser, formatflaggor och
-  pluralformer. Ändrade luddiga poster får flaggan `fuzzy` tills du markerar dem granskade.
+  pluralformer. Poster som behöver granskas visas som **luddiga** i Ordverk och
+  får flaggan `fuzzy` i PO-filen tills du markerar dem granskade.
 - Qt TS bevarar meddelandekontext, numerus, längdvarianter, status och okända attribut.
 - XLIFF bevarar dokumentstrukturen och taggar. Inlinekoder visas som `⟦1⟧`
   och `⟦/1⟧`; alla koder och deras nästling måste bevaras vid redigering.
