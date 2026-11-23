@@ -3,6 +3,7 @@ import json
 
 import pytest
 
+from ordverk import __version__
 from ordverk.catalog import Catalog, Unit
 from ordverk.diffs import parse_diff, propose_diff
 from ordverk.po_header import stamp_translator, translator_identity, update_header
@@ -135,7 +136,7 @@ def test_save_stamp_updates_revision_but_keeps_template_date_and_unknown_identit
 def test_configured_translator_identity_is_written_through_catalog_save(tmp_path):
     catalog = Catalog(
         "sv.po",
-        b'msgid ""\nmsgstr ""\n"Last-Translator: Forra personen\\n"\n\nmsgid "Save"\nmsgstr ""\n',
+        b'msgid ""\nmsgstr ""\n"Last-Translator: Forra personen\\n"\n"X-Generator: Gammalt program\\n"\n\nmsgid "Save"\nmsgstr ""\n',
     )
     settings = Settings(translator_name="Ny översättare", translator_email="ny@example.org")
 
@@ -145,6 +146,7 @@ def test_configured_translator_identity_is_written_through_catalog_save(tmp_path
 
     reopened = Catalog.open(path)
     assert reopened.po.metadata["Last-Translator"] == "Ny översättare <ny@example.org>"
+    assert reopened.po.metadata["X-Generator"] == f"Ordverk {__version__}"
 
 
 def test_json_reference_changes_count_as_unsaved_work(tmp_path):
